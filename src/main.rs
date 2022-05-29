@@ -78,8 +78,7 @@ fn setup_system(mut commands: Commands) {
         .insert(ThrustEngine::new(1.5))
         .insert(SteeringControl(Angle::degrees(180.0)))
         .insert(Weapon::new(Duration::from_millis(100)))
-        .insert(BoundaryWrap)
-        .insert(Ship);
+        .insert(BoundaryWrap);
 }
 
 #[derive(Debug, Component, Default)]
@@ -130,9 +129,6 @@ impl Weapon {
         }
     }
 }
-
-#[derive(Debug, Component, Default)]
-struct Ship;
 
 #[derive(Debug, Component, Default)]
 struct BoundaryWrap;
@@ -260,7 +256,7 @@ fn steering_control_system(
 
 fn thrust_control_system(
     keyboard_input: Res<Input<KeyCode>>,
-    mut query: Query<&mut ThrustEngine, With<Ship>>,
+    mut query: Query<&mut ThrustEngine>,
 ) {
     for mut thrust_engine in query.iter_mut() {
         thrust_engine.on = keyboard_input.pressed(KeyCode::Up)
