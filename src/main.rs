@@ -22,7 +22,7 @@ fn main() {
         .add_system_set(
             SystemSet::new()
                 .label("input")
-                .with_system(ship_control_system)
+                .with_system(steering_control_system)
                 .with_system(thrust_control_system)
                 .with_system(weapon_control_system),
         )
@@ -75,6 +75,7 @@ fn setup_system(mut commands: Commands) {
         .insert(SpeedLimit(400.0))
         .insert(Damping(0.988))
         .insert(ThrustEngine::default())
+        .insert(SteeringControl(Angle::degrees(180.0)))
         .insert(Weapon::new(Duration::from_millis(100)))
         .insert(BoundaryWrap)
         .insert(Ship);
@@ -100,6 +101,7 @@ struct Damping(f32);
 struct ThrustEngine(bool);
 
 #[derive(Debug, Component, Default)]
+struct SteeringControl(Angle);
 struct Weapon {
     rate_of_fire: Timer,
     triggered: bool,
@@ -223,16 +225,17 @@ fn boundary_remove_system(
     }
 }
 
-fn ship_control_system(
+fn steering_control_system(
     keyboard_input: Res<Input<KeyCode>>,
-    mut query: Query<&mut Spatial, With<Ship>>,
+    time: Res<Time>,
+    mut query: Query<(&mut Spatial, &SteeringControl)>,
 ) {
-    for mut spatial in query.iter_mut() {
+    for (mut spatial, steering) in query.iter_mut() {
         if keyboard_input.pressed(KeyCode::Left) {
-            spatial.rotation += Angle::degrees(90.0).get() * TIME_STEP;
+            spatial.rotation += steering.0.get() * time.delta_seconds();
         }
         if keyboard_input.pressed(KeyCode::Right) {
-            spatial.rotation -= Angle::degrees(90.0).get() * TIME_STEP;
+            spatial.rotation -= steering.0.get() * time.delta_seconds();
         }
     }
 }
