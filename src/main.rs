@@ -6,7 +6,7 @@ use bevy_prototype_lyon::prelude::{
     *,
 };
 
-const TIME_STEP: f32 = 1.0 / 60.0;
+const TIME_STEP: f32 = 1.0 / 120.0;
 
 fn main() {
     App::new()
@@ -33,8 +33,9 @@ fn main() {
                 .with_run_criteria(FixedTimestep::step(TIME_STEP.into()))
                 .label("physics")
                 .after("input")
-                .with_system(damping_system)
-                .with_system(movement_system)
+                .with_system(damping_system.before(movement_system))
+                .with_system(speed_limit_system.before(movement_system))
+                .with_system(movement_system),
         )
         .add_system_set(
             SystemSet::new()
@@ -72,9 +73,9 @@ fn setup_system(mut commands: Commands) {
             radius: 12.0,
         })
         .insert(Velocity::default())
-        .insert(SpeedLimit(400.0))
-        .insert(Damping(0.988))
-        .insert(ThrustEngine::default())
+        .insert(SpeedLimit(350.0))
+        .insert(Damping(0.998))
+        .insert(ThrustEngine::new(1.5))
         .insert(SteeringControl(Angle::degrees(180.0)))
         .insert(Weapon::new(Duration::from_millis(100)))
         .insert(BoundaryWrap)
@@ -98,10 +99,24 @@ struct SpeedLimit(f32);
 struct Damping(f32);
 
 #[derive(Debug, Component, Default)]
-struct ThrustEngine(bool);
+struct ThrustEngine {
+    force: f32,
+    on: bool,
+}
+
+impl ThrustEngine {
+    pub fn new(force: f32) -> Self {
+        Self {
+            force,
+            ..Default::default()
+        }
+    }
+}
 
 #[derive(Debug, Component, Default)]
 struct SteeringControl(Angle);
+
+#[derive(Debug, Component, Default)]
 struct Weapon {
     rate_of_fire: Timer,
     triggered: bool,
@@ -125,12 +140,15 @@ struct BoundaryWrap;
 #[derive(Debug, Component, Default)]
 struct BoundaryRemoval;
 
-fn movement_system(mut query: Query<(&mut Spatial, &Velocity, Option<&SpeedLimit>)>) {
-    for (mut spatial, velocity, speed_limit) in query.iter_mut() {
-        spatial.position += match speed_limit {
-            Some(SpeedLimit(limit)) => velocity.0.clamp_length_max(*limit),
-            None => velocity.0,
-        } * TIME_STEP;
+fn movement_system(mut query: Query<(&mut Spatial, &Velocity)>) {
+    for (mut spatial, velocity) in query.iter_mut() {
+        spatial.position += velocity.0 * TIME_STEP;
+    }
+}
+
+fn speed_limit_system(mut query: Query<(&mut Velocity, &SpeedLimit)>) {
+    for (mut velocity, speed_limit) in query.iter_mut() {
+        velocity.0 = velocity.0.clamp_length_max(speed_limit.0);
     }
 }
 
@@ -142,9 +160,9 @@ fn damping_system(mut query: Query<(&mut Velocity, &Damping)>) {
 
 fn thrust_system(mut query: Query<(&mut Velocity, &ThrustEngine, &Spatial)>) {
     for (mut velocity, thrust, spatial) in query.iter_mut() {
-        if thrust.0 {
-            velocity.0.x += spatial.rotation.cos() * 2.0;
-            velocity.0.y += spatial.rotation.sin() * 2.0;
+        if thrust.on {
+            velocity.0.x += spatial.rotation.cos() * thrust.force;
+            velocity.0.y += spatial.rotation.sin() * thrust.force;
         }
     }
 }
@@ -245,7 +263,7 @@ fn thrust_control_system(
     mut query: Query<&mut ThrustEngine, With<Ship>>,
 ) {
     for mut thrust_engine in query.iter_mut() {
-        thrust_engine.0 = keyboard_input.pressed(KeyCode::Up)
+        thrust_engine.on = keyboard_input.pressed(KeyCode::Up)
     }
 }
 
