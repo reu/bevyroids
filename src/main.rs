@@ -35,7 +35,6 @@ fn main() {
                 .after("input")
                 .with_system(damping_system)
                 .with_system(movement_system)
-                .with_system(weapon_system),
         )
         .add_system_set(
             SystemSet::new()
