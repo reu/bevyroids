@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use bevy::{core::FixedTimestep, prelude::*, window::PresentMode};
 use bevy_prototype_lyon::prelude::{
     tess::{geom::Rotation, math::Angle},
@@ -74,10 +76,7 @@ fn setup_system(mut commands: Commands) {
         .insert(SpeedLimit(400.0))
         .insert(Damping(0.988))
         .insert(ThrustEngine::default())
-        .insert(Weapon {
-            rate_of_fire: 9.0,
-            ..Default::default()
-        })
+        .insert(Weapon::new(Duration::from_millis(100)))
         .insert(BoundaryWrap)
         .insert(Ship);
 }
@@ -103,12 +102,18 @@ struct ThrustEngine(bool);
 
 #[derive(Debug, Component, Default)]
 struct Weapon {
-    rate_of_fire: f32,
+    rate_of_fire: Timer,
     triggered: bool,
 }
 
-#[derive(Debug, Component, Default)]
-struct WeaponCooldown(f32);
+impl Weapon {
+    pub fn new(rate_of_fire: Duration) -> Self {
+        Self {
+            rate_of_fire: Timer::new(rate_of_fire, true),
+            ..Default::default()
+        }
+    }
+}
 
 #[derive(Debug, Component, Default)]
 struct Ship;
@@ -144,49 +149,39 @@ fn thrust_system(mut query: Query<(&mut Velocity, &ThrustEngine, &Spatial)>) {
 }
 
 fn weapon_system(
+    time: Res<Time>,
     mut commands: Commands,
-    mut query: Query<(Entity, &Spatial, &Weapon, Option<&mut WeaponCooldown>)>,
+    mut query: Query<(&Spatial, &mut Weapon)>,
 ) {
-    for (entity, spatial, weapon, mut cooldown) in query.iter_mut() {
-        match cooldown {
-            Some(ref mut cooldown) if cooldown.0 > 0.0 => {
-                cooldown.0 -= 1.0;
-            }
-            Some(ref cooldown) if cooldown.0 <= 0.0 => {
-                commands.entity(entity).remove::<WeaponCooldown>();
-            }
-            None if weapon.triggered => {
-                commands
-                    .entity(entity)
-                    .insert(WeaponCooldown(weapon.rate_of_fire));
+    for (spatial, mut weapon) in query.iter_mut() {
+        weapon.rate_of_fire.tick(time.delta());
 
-                let bullet_dir = Vec2::new(spatial.rotation.cos(), spatial.rotation.sin());
-                let bullet_vel = bullet_dir * 1000.0;
-                let bullet_pos = spatial.position + (bullet_dir * spatial.radius);
+        if weapon.rate_of_fire.finished() && weapon.triggered {
+            let bullet_dir = Vec2::new(spatial.rotation.cos(), spatial.rotation.sin());
+            let bullet_vel = bullet_dir * 1000.0;
+            let bullet_pos = spatial.position + (bullet_dir * spatial.radius);
 
-                commands
-                    .spawn_bundle(GeometryBuilder::build_as(
-                        &shapes::Circle {
-                            radius: 2.0,
-                            center: Vec2::ZERO,
-                        },
-                        DrawMode::Fill(FillMode::color(Color::BLACK)),
-                        Transform::default().with_translation(Vec3::new(
-                            bullet_pos.x,
-                            bullet_pos.y,
-                            0.0,
-                        )),
-                    ))
-                    .insert(Spatial {
-                        position: bullet_pos,
-                        rotation: 0.0,
+            commands
+                .spawn_bundle(GeometryBuilder::build_as(
+                    &shapes::Circle {
                         radius: 2.0,
-                    })
-                    .insert(Velocity(bullet_vel))
-                    .insert(BoundaryRemoval);
-            }
-            _ => {}
-        };
+                        center: Vec2::ZERO,
+                    },
+                    DrawMode::Fill(FillMode::color(Color::BLACK)),
+                    Transform::default().with_translation(Vec3::new(
+                        bullet_pos.x,
+                        bullet_pos.y,
+                        0.0,
+                    )),
+                ))
+                .insert(Spatial {
+                    position: bullet_pos,
+                    rotation: 0.0,
+                    radius: 2.0,
+                })
+                .insert(Velocity(bullet_vel))
+                .insert(BoundaryRemoval);
+        }
     }
 }
 
