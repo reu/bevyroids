@@ -3,6 +3,15 @@ name = "bevyroids"
 version = "0.1.0"
 edition = "2021"
 
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+
 [dependencies]
 bevy = { version = "0.7.0", features = ["dynamic"] }
 bevy_prototype_lyon = "0.5.0"

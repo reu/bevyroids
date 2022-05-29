@@ -1,8 +1,10 @@
-use bevy::{prelude::*, window::PresentMode};
+use bevy::{core::FixedTimestep, prelude::*, window::PresentMode};
 use bevy_prototype_lyon::prelude::{
     tess::{geom::Rotation, math::Angle},
     *,
 };
+
+const TIME_STEP: f32 = 1.0 / 60.0;
 
 fn main() {
     App::new()
@@ -26,6 +28,7 @@ fn main() {
         .add_system(thrust_system.after("input").before("physics"))
         .add_system_set(
             SystemSet::new()
+                .with_run_criteria(FixedTimestep::step(TIME_STEP.into()))
                 .label("physics")
                 .after("input")
                 .with_system(damping_system)
@@ -68,11 +71,11 @@ fn setup_system(mut commands: Commands) {
             radius: 12.0,
         })
         .insert(Velocity::default())
-        .insert(SpeedLimit(8.0))
-        .insert(Damping(0.998))
+        .insert(SpeedLimit(400.0))
+        .insert(Damping(0.988))
         .insert(ThrustEngine::default())
         .insert(Weapon {
-            rate_of_fire: 3.0,
+            rate_of_fire: 9.0,
             ..Default::default()
         })
         .insert(BoundaryWrap)
@@ -121,7 +124,7 @@ fn movement_system(mut query: Query<(&mut Spatial, &Velocity, Option<&SpeedLimit
         spatial.position += match speed_limit {
             Some(SpeedLimit(limit)) => velocity.0.clamp_length_max(*limit),
             None => velocity.0,
-        };
+        } * TIME_STEP;
     }
 }
 
@@ -134,8 +137,8 @@ fn damping_system(mut query: Query<(&mut Velocity, &Damping)>) {
 fn thrust_system(mut query: Query<(&mut Velocity, &ThrustEngine, &Spatial)>) {
     for (mut velocity, thrust, spatial) in query.iter_mut() {
         if thrust.0 {
-            velocity.0.x += spatial.rotation.cos() * 0.1;
-            velocity.0.y += spatial.rotation.sin() * 0.1;
+            velocity.0.x += spatial.rotation.cos() * 2.0;
+            velocity.0.y += spatial.rotation.sin() * 2.0;
         }
     }
 }
@@ -158,7 +161,7 @@ fn weapon_system(
                     .insert(WeaponCooldown(weapon.rate_of_fire));
 
                 let bullet_dir = Vec2::new(spatial.rotation.cos(), spatial.rotation.sin());
-                let bullet_vel = bullet_dir * 10.0;
+                let bullet_vel = bullet_dir * 1000.0;
                 let bullet_pos = spatial.position + (bullet_dir * spatial.radius);
 
                 commands
@@ -232,10 +235,10 @@ fn ship_control_system(
 ) {
     for mut spatial in query.iter_mut() {
         if keyboard_input.pressed(KeyCode::Left) {
-            spatial.rotation += 0.1;
+            spatial.rotation += Angle::degrees(90.0).get() * TIME_STEP;
         }
         if keyboard_input.pressed(KeyCode::Right) {
-            spatial.rotation -= 0.1;
+            spatial.rotation -= Angle::degrees(90.0).get() * TIME_STEP;
         }
     }
 }
