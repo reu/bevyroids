@@ -5,6 +5,7 @@ use bevy_prototype_lyon::prelude::{
     tess::{geom::Rotation, math::Angle},
     *,
 };
+use rand::{prelude::SmallRng, Rng, SeedableRng};
 
 const TIME_STEP: f32 = 1.0 / 120.0;
 
@@ -18,6 +19,7 @@ fn main() {
         .insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins)
         .add_plugin(ShapePlugin)
+        .insert_resource(Random(SmallRng::from_entropy()))
         .add_startup_system(setup_system)
         .add_system_set(
             SystemSet::new()
@@ -28,6 +30,7 @@ fn main() {
         )
         .add_system(weapon_system.after("input").before("physics"))
         .add_system(thrust_system.after("input").before("physics"))
+        .add_system(asteroid_spawn_system.with_run_criteria(FixedTimestep::step(0.5)))
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(TIME_STEP.into()))
@@ -79,6 +82,18 @@ fn setup_system(mut commands: Commands) {
         .insert(SteeringControl(Angle::degrees(180.0)))
         .insert(Weapon::new(Duration::from_millis(100)))
         .insert(BoundaryWrap);
+}
+
+#[derive(Debug, Deref, DerefMut)]
+struct Random(SmallRng);
+
+impl FromWorld for Random {
+    fn from_world(world: &mut World) -> Self {
+        let rng = world
+            .get_resource_mut::<Random>()
+            .expect("Random resource not found");
+        Random(SmallRng::from_rng(rng.clone()).unwrap())
+    }
 }
 
 #[derive(Debug, Component, Default)]
@@ -200,6 +215,48 @@ fn weapon_system(
     }
 }
 
+fn asteroid_spawn_system(
+    window: Res<WindowDescriptor>,
+    mut rng: Local<Random>,
+    mut commands: Commands,
+) {
+    if rng.gen_bool(1.0 / 3.0) {
+        let w = window.width / 2.0;
+        let h = window.height / 2.0;
+
+        let x = rng.gen_range(-w..w);
+        let y = rng.gen_range(-h..h);
+        let r = rng.gen_range(30.0..40.0);
+        let c = r * 2.0;
+
+        let position = if rng.gen_bool(1.0 / 2.0) {
+            Vec2::new(x, if y > 0.0 { h + c } else { -h - c })
+        } else {
+            Vec2::new(if x > 0.0 { w + c } else { -w - c }, y)
+        };
+
+        let velocity = Vec2::new(rng.gen_range(-w..w), rng.gen_range(-h..h));
+        let velocity = (velocity - position).normalize_or_zero() * rng.gen_range(30.0..60.0);
+
+        commands
+            .spawn_bundle(GeometryBuilder::build_as(
+                &shapes::Circle {
+                    radius: r,
+                    center: Vec2::ZERO,
+                },
+                DrawMode::Fill(FillMode::color(Color::BLACK)),
+                Transform::default().with_translation(Vec3::new(position.x, position.y, 0.0)),
+            ))
+            .insert(Spatial {
+                position,
+                rotation: 0.0,
+                radius: r,
+            })
+            .insert(Velocity(velocity))
+            .insert(BoundaryRemoval);
+    }
+}
+
 fn boundary_wrap_system(
     window: Res<WindowDescriptor>,
     mut query: Query<&mut Spatial, With<BoundaryWrap>>,
@@ -254,10 +311,7 @@ fn steering_control_system(
     }
 }
 
-fn thrust_control_system(
-    keyboard_input: Res<Input<KeyCode>>,
-    mut query: Query<&mut ThrustEngine>,
-) {
+fn thrust_control_system(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut ThrustEngine>) {
     for mut thrust_engine in query.iter_mut() {
         thrust_engine.on = keyboard_input.pressed(KeyCode::Up)
     }
