@@ -64,41 +64,6 @@ fn main() {
         .run();
 }
 
-fn setup_system(mut commands: Commands) {
-    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
-
-    commands
-        .spawn_bundle(GeometryBuilder::build_as(
-            &{
-                let mut path_builder = PathBuilder::new();
-                path_builder.move_to(Vec2::ZERO);
-                path_builder.line_to(Vec2::new(-8.0, -8.0));
-                path_builder.line_to(Vec2::new(0.0, 12.0));
-                path_builder.line_to(Vec2::new(8.0, -8.0));
-                path_builder.line_to(Vec2::ZERO);
-                let mut line = path_builder.build();
-                line.0 = line.0.transformed(&Rotation::new(Angle::degrees(-90.0)));
-                line
-            },
-            DrawMode::Stroke(StrokeMode::new(Color::BLACK, 1.0)),
-            Transform::default(),
-        ))
-        .insert(Spatial {
-            position: Vec2::ZERO,
-            rotation: 0.0,
-            radius: 12.0,
-        })
-        .insert(Ship)
-        .insert(Velocity::default())
-        .insert(SpeedLimit(350.0))
-        .insert(Damping(0.998))
-        .insert(ThrustEngine::new(1.5))
-        .insert(AngularVelocity::default())
-        .insert(SteeringControl(Angle::degrees(180.0)))
-        .insert(Weapon::new(Duration::from_millis(100)))
-        .insert(BoundaryWrap);
-}
-
 #[derive(Debug, Deref, DerefMut)]
 struct Random(SmallRng);
 
@@ -199,6 +164,41 @@ fn hit_event<A, B>(e1: Entity, e2: Entity) -> HitEvent<A, B> {
         entities: (e1, e2),
         _phantom: PhantomData,
     }
+}
+
+fn setup_system(mut commands: Commands) {
+    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+
+    commands
+        .spawn_bundle(GeometryBuilder::build_as(
+            &{
+                let mut path_builder = PathBuilder::new();
+                path_builder.move_to(Vec2::ZERO);
+                path_builder.line_to(Vec2::new(-8.0, -8.0));
+                path_builder.line_to(Vec2::new(0.0, 12.0));
+                path_builder.line_to(Vec2::new(8.0, -8.0));
+                path_builder.line_to(Vec2::ZERO);
+                let mut line = path_builder.build();
+                line.0 = line.0.transformed(&Rotation::new(Angle::degrees(-90.0)));
+                line
+            },
+            DrawMode::Stroke(StrokeMode::new(Color::BLACK, 1.0)),
+            Transform::default(),
+        ))
+        .insert(Spatial {
+            position: Vec2::ZERO,
+            rotation: 0.0,
+            radius: 12.0,
+        })
+        .insert(Ship)
+        .insert(Velocity::default())
+        .insert(SpeedLimit(350.0))
+        .insert(Damping(0.998))
+        .insert(ThrustEngine::new(1.5))
+        .insert(AngularVelocity::default())
+        .insert(SteeringControl(Angle::degrees(180.0)))
+        .insert(Weapon::new(Duration::from_millis(100)))
+        .insert(BoundaryWrap);
 }
 
 fn movement_system(mut query: Query<(&mut Spatial, Option<&Velocity>, Option<&AngularVelocity>)>) {
