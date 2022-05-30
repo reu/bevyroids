@@ -1,9 +1,12 @@
-use std::time::Duration;
+use std::{f32::consts::PI, time::Duration};
 
 use bevy::{core::FixedTimestep, prelude::*, window::PresentMode};
-use bevy_prototype_lyon::prelude::{
-    tess::{geom::Rotation, math::Angle},
-    *,
+use bevy_prototype_lyon::{
+    prelude::{
+        tess::{geom::Rotation, math::Angle},
+        *,
+    },
+    shapes::Polygon,
 };
 use rand::{prelude::SmallRng, Rng, SeedableRng};
 
@@ -249,13 +252,28 @@ fn asteroid_spawn_system(
         let velocity = Vec2::new(rng.gen_range(-w..w), rng.gen_range(-h..h));
         let velocity = (velocity - position).normalize_or_zero() * rng.gen_range(30.0..60.0);
 
+        let shape = {
+            let sides = rng.gen_range(6..12);
+            let mut points = Vec::with_capacity(sides);
+            let n = sides as f32;
+            let internal = (n - 2.0) * PI / n;
+            let offset = -internal / 2.0;
+            let step = 2.0 * PI / n;
+            for i in 0..sides {
+                let cur_angle = (i as f32).mul_add(step, offset);
+                let x = r * rng.gen_range(0.5..1.2) * cur_angle.cos();
+                let y = r * rng.gen_range(0.5..1.2) * cur_angle.sin();
+                points.push(Vec2::new(x, y));
+            }
+            Polygon {
+                points,
+                closed: true,
+            }
+        };
+
         commands
             .spawn_bundle(GeometryBuilder::build_as(
-                &shapes::RegularPolygon {
-                    sides: rng.gen_range(5..8),
-                    center: Vec2::ZERO,
-                    feature: RegularPolygonFeature::Radius(r),
-                },
+                &shape,
                 DrawMode::Stroke(StrokeMode::new(Color::BLACK, 1.0)),
                 Transform::default().with_translation(Vec3::new(position.x, position.y, 0.0)),
             ))
