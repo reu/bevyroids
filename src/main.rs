@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, time::Duration};
+use std::{f32::consts::PI, marker::PhantomData, ops::Range, time::Duration};
 
 use bevy::{core::FixedTimestep, prelude::*, window::PresentMode};
 use bevy_prototype_lyon::{
@@ -12,6 +12,10 @@ use rand::{prelude::SmallRng, Rng, SeedableRng};
 
 const TIME_STEP: f32 = 1.0 / 120.0;
 
+const BIG_ASTEROID: Range<f32> = 50.0..60.0;
+const MEDIUM_ASTEROID: Range<f32> = 30.0..40.0;
+const SMALL_ASTEROID: Range<f32> = 10.0..20.0;
+
 fn main() {
     App::new()
         .insert_resource(WindowDescriptor {
@@ -23,6 +27,9 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(ShapePlugin)
         .insert_resource(Random(SmallRng::from_entropy()))
+        .add_event::<AsteroidSpawnEvent>()
+        .add_event::<HitEvent<Asteroid, Bullet>>()
+        .add_event::<HitEvent<Asteroid, Ship>>()
         .add_startup_system(setup_system)
         .add_system_set(
             SystemSet::new()
@@ -34,6 +41,7 @@ fn main() {
         .add_system(weapon_system.after("input").before("physics"))
         .add_system(thrust_system.after("input").before("physics"))
         .add_system(asteroid_spawn_system.with_run_criteria(FixedTimestep::step(0.5)))
+        .add_system(asteroid_generation_system)
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(TIME_STEP.into()))
@@ -50,6 +58,8 @@ fn main() {
                 .with_system(boundary_remove_system)
                 .with_system(boundary_wrap_system),
         )
+        .add_system(collision_system)
+        .add_system(asteroid_hit_system)
         .add_system(drawing_system.after("wrap"))
         .run();
 }
@@ -78,6 +88,7 @@ fn setup_system(mut commands: Commands) {
             rotation: 0.0,
             radius: 12.0,
         })
+        .insert(Ship)
         .insert(Velocity::default())
         .insert(SpeedLimit(350.0))
         .insert(Damping(0.998))
@@ -100,11 +111,18 @@ impl FromWorld for Random {
     }
 }
 
-#[derive(Debug, Component, Default)]
+#[derive(Debug, Component, Default, Clone)]
 struct Spatial {
     position: Vec2,
     rotation: f32,
     radius: f32,
+}
+
+impl Spatial {
+    fn intersects(&self, other: &Spatial) -> bool {
+        let distance = (self.position - other.position).length();
+        distance < self.radius + other.radius
+    }
 }
 
 #[derive(Debug, Component, Default)]
@@ -157,6 +175,31 @@ struct BoundaryWrap;
 
 #[derive(Debug, Component, Default)]
 struct BoundaryRemoval;
+
+#[derive(Debug, Component, Default)]
+struct Ship;
+
+#[derive(Debug, Component, Default)]
+struct Bullet;
+
+#[derive(Debug, Component, Default)]
+struct Asteroid;
+
+#[derive(Debug, Deref)]
+struct AsteroidSpawnEvent(Spatial);
+
+#[derive(Debug)]
+struct HitEvent<A, B> {
+    entities: (Entity, Entity),
+    _phantom: PhantomData<(A, B)>,
+}
+
+fn hit_event<A, B>(e1: Entity, e2: Entity) -> HitEvent<A, B> {
+    HitEvent {
+        entities: (e1, e2),
+        _phantom: PhantomData,
+    }
+}
 
 fn movement_system(mut query: Query<(&mut Spatial, Option<&Velocity>, Option<&AngularVelocity>)>) {
     for (mut spatial, velocity, angular_velocity) in query.iter_mut() {
@@ -218,6 +261,7 @@ fn weapon_system(
                         0.0,
                     )),
                 ))
+                .insert(Bullet)
                 .insert(Spatial {
                     position: bullet_pos,
                     rotation: 0.0,
@@ -229,10 +273,38 @@ fn weapon_system(
     }
 }
 
+fn collision_system(
+    mut asteroid_hits: EventWriter<HitEvent<Asteroid, Bullet>>,
+    mut commands: Commands,
+    ships: Query<(Entity, &Spatial), With<Ship>>,
+    asteroids: Query<(Entity, &Spatial), With<Asteroid>>,
+    bullets: Query<(Entity, &Spatial), With<Bullet>>,
+) {
+    for (bullet_entity, bullet) in bullets.iter() {
+        for (asteroid_entity, asteroid) in asteroids.iter() {
+            if bullet.intersects(asteroid) {
+                asteroid_hits.send(hit_event::<Asteroid, Bullet>(
+                    asteroid_entity,
+                    bullet_entity,
+                ))
+            }
+        }
+    }
+
+    for (_ship_entity, ship) in ships.iter() {
+        for (asteroid_entity, asteroid) in asteroids.iter() {
+            if ship.intersects(asteroid) {
+                println!("Asteroid hit ship!");
+                commands.entity(asteroid_entity).despawn();
+            }
+        }
+    }
+}
+
 fn asteroid_spawn_system(
     window: Res<WindowDescriptor>,
     mut rng: Local<Random>,
-    mut commands: Commands,
+    mut asteroids: EventWriter<AsteroidSpawnEvent>,
 ) {
     if rng.gen_bool(1.0 / 3.0) {
         let w = window.width / 2.0;
@@ -240,8 +312,12 @@ fn asteroid_spawn_system(
 
         let x = rng.gen_range(-w..w);
         let y = rng.gen_range(-h..h);
-        let r = rng.gen_range(30.0..40.0);
-        let c = r * 2.0;
+        let radius = match rng.gen_range(1..=3) {
+            3 => rng.gen_range(BIG_ASTEROID),
+            2 => rng.gen_range(MEDIUM_ASTEROID),
+            _ => rng.gen_range(SMALL_ASTEROID),
+        };
+        let c = radius * 2.0;
 
         let position = if rng.gen_bool(1.0 / 2.0) {
             Vec2::new(x, if y > 0.0 { h + c } else { -h - c })
@@ -249,8 +325,35 @@ fn asteroid_spawn_system(
             Vec2::new(if x > 0.0 { w + c } else { -w - c }, y)
         };
 
+        asteroids.send(AsteroidSpawnEvent(Spatial {
+            position,
+            radius,
+            ..Default::default()
+        }));
+    }
+}
+
+fn asteroid_generation_system(
+    window: Res<WindowDescriptor>,
+    mut rng: Local<Random>,
+    mut asteroids: EventReader<AsteroidSpawnEvent>,
+    mut commands: Commands,
+) {
+    let w = window.width / 2.0;
+    let h = window.height / 2.0;
+
+    for asteroid in asteroids.iter() {
+        let position = asteroid.position;
+
         let velocity = Vec2::new(rng.gen_range(-w..w), rng.gen_range(-h..h));
-        let velocity = (velocity - position).normalize_or_zero() * rng.gen_range(30.0..60.0);
+        let scale = if BIG_ASTEROID.contains(&asteroid.radius) {
+            rng.gen_range(30.0..60.0)
+        } else if MEDIUM_ASTEROID.contains(&asteroid.radius) {
+            rng.gen_range(60.0..80.0)
+        } else {
+            rng.gen_range(80.0..100.0)
+        };
+        let velocity = (velocity - position).normalize_or_zero() * scale;
 
         let shape = {
             let sides = rng.gen_range(6..12);
@@ -259,6 +362,7 @@ fn asteroid_spawn_system(
             let internal = (n - 2.0) * PI / n;
             let offset = -internal / 2.0;
             let step = 2.0 * PI / n;
+            let r = asteroid.radius;
             for i in 0..sides {
                 let cur_angle = (i as f32).mul_add(step, offset);
                 let x = r * rng.gen_range(0.5..1.2) * cur_angle.cos();
@@ -277,11 +381,8 @@ fn asteroid_spawn_system(
                 DrawMode::Stroke(StrokeMode::new(Color::BLACK, 1.0)),
                 Transform::default().with_translation(Vec3::new(position.x, position.y, 0.0)),
             ))
-            .insert(Spatial {
-                position,
-                rotation: 0.0,
-                radius: r,
-            })
+            .insert(Asteroid)
+            .insert(asteroid.0.clone())
             .insert(Velocity(velocity))
             .insert(AngularVelocity(rng.gen_range(-3.0..3.0)))
             .insert(BoundaryRemoval);
@@ -359,5 +460,41 @@ fn drawing_system(mut query: Query<(&mut Transform, &Spatial)>) {
         transform.translation.x = spatial.position.x;
         transform.translation.y = spatial.position.y;
         transform.rotation = Quat::from_rotation_z(spatial.rotation);
+    }
+}
+
+fn asteroid_hit_system(
+    mut rng: Local<Random>,
+    mut asteroid_hits: EventReader<HitEvent<Asteroid, Bullet>>,
+    mut asteroid_spawn: EventWriter<AsteroidSpawnEvent>,
+    mut commands: Commands,
+    query: Query<&Spatial, With<Asteroid>>,
+) {
+    for hit in asteroid_hits.iter() {
+        let asteroid = hit.entities.0;
+        let bullet = hit.entities.1;
+
+        if let Ok(spatial) = query.get(asteroid) {
+            if BIG_ASTEROID.contains(&spatial.radius) {
+                let spatial = Spatial {
+                    radius: rng.gen_range(MEDIUM_ASTEROID),
+                    ..spatial.clone()
+                };
+
+                asteroid_spawn.send(AsteroidSpawnEvent(spatial.clone()));
+                asteroid_spawn.send(AsteroidSpawnEvent(spatial.clone()));
+                asteroid_spawn.send(AsteroidSpawnEvent(spatial.clone()));
+            } else if MEDIUM_ASTEROID.contains(&spatial.radius) {
+                let spatial = Spatial {
+                    radius: rng.gen_range(SMALL_ASTEROID),
+                    ..spatial.clone()
+                };
+                asteroid_spawn.send(AsteroidSpawnEvent(spatial.clone()));
+                asteroid_spawn.send(AsteroidSpawnEvent(spatial.clone()));
+            }
+        }
+
+        commands.entity(asteroid).despawn();
+        commands.entity(bullet).despawn();
     }
 }
