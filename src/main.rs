@@ -136,14 +136,14 @@ struct SteeringControl(Angle);
 
 #[derive(Debug, Component, Default)]
 struct Weapon {
-    rate_of_fire: Timer,
+    cooldown: Timer,
     triggered: bool,
 }
 
 impl Weapon {
     pub fn new(rate_of_fire: Duration) -> Self {
         Self {
-            rate_of_fire: Timer::new(rate_of_fire, true),
+            cooldown: Timer::new(rate_of_fire, true),
             ..Default::default()
         }
     }
@@ -193,9 +193,11 @@ fn weapon_system(
     mut query: Query<(&Spatial, &mut Weapon)>,
 ) {
     for (spatial, mut weapon) in query.iter_mut() {
-        weapon.rate_of_fire.tick(time.delta());
+        weapon.cooldown.tick(time.delta());
 
-        if weapon.rate_of_fire.finished() && weapon.triggered {
+        if weapon.cooldown.finished() && weapon.triggered {
+            weapon.triggered = false;
+
             let bullet_dir = Vec2::new(spatial.rotation.cos(), spatial.rotation.sin());
             let bullet_vel = bullet_dir * 1000.0;
             let bullet_pos = spatial.position + (bullet_dir * spatial.radius);
@@ -330,7 +332,7 @@ fn thrust_control_system(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&
 
 fn weapon_control_system(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Weapon>) {
     for mut weapon in query.iter_mut() {
-        weapon.triggered = keyboard_input.pressed(KeyCode::Space)
+        weapon.triggered = weapon.triggered || keyboard_input.just_pressed(KeyCode::Space);
     }
 }
 
