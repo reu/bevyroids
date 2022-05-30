@@ -79,6 +79,7 @@ fn setup_system(mut commands: Commands) {
         .insert(SpeedLimit(350.0))
         .insert(Damping(0.998))
         .insert(ThrustEngine::new(1.5))
+        .insert(AngularVelocity::default())
         .insert(SteeringControl(Angle::degrees(180.0)))
         .insert(Weapon::new(Duration::from_millis(100)))
         .insert(BoundaryWrap);
@@ -105,6 +106,9 @@ struct Spatial {
 
 #[derive(Debug, Component, Default)]
 struct Velocity(Vec2);
+
+#[derive(Debug, Component, Default)]
+struct AngularVelocity(f32);
 
 #[derive(Debug, Component, Default)]
 struct SpeedLimit(f32);
@@ -151,9 +155,14 @@ struct BoundaryWrap;
 #[derive(Debug, Component, Default)]
 struct BoundaryRemoval;
 
-fn movement_system(mut query: Query<(&mut Spatial, &Velocity)>) {
-    for (mut spatial, velocity) in query.iter_mut() {
-        spatial.position += velocity.0 * TIME_STEP;
+fn movement_system(mut query: Query<(&mut Spatial, Option<&Velocity>, Option<&AngularVelocity>)>) {
+    for (mut spatial, velocity, angular_velocity) in query.iter_mut() {
+        if let Some(velocity) = velocity {
+            spatial.position += velocity.0 * TIME_STEP;
+        }
+        if let Some(angular_velocity) = angular_velocity {
+            spatial.rotation += angular_velocity.0 * TIME_STEP;
+        }
     }
 }
 
@@ -240,11 +249,12 @@ fn asteroid_spawn_system(
 
         commands
             .spawn_bundle(GeometryBuilder::build_as(
-                &shapes::Circle {
-                    radius: r,
+                &shapes::RegularPolygon {
+                    sides: rng.gen_range(5..8),
                     center: Vec2::ZERO,
+                    feature: RegularPolygonFeature::Radius(r),
                 },
-                DrawMode::Fill(FillMode::color(Color::BLACK)),
+                DrawMode::Stroke(StrokeMode::new(Color::BLACK, 1.0)),
                 Transform::default().with_translation(Vec3::new(position.x, position.y, 0.0)),
             ))
             .insert(Spatial {
@@ -253,6 +263,7 @@ fn asteroid_spawn_system(
                 radius: r,
             })
             .insert(Velocity(velocity))
+            .insert(AngularVelocity(rng.gen_range(-3.0..3.0)))
             .insert(BoundaryRemoval);
     }
 }
@@ -298,15 +309,15 @@ fn boundary_remove_system(
 
 fn steering_control_system(
     keyboard_input: Res<Input<KeyCode>>,
-    time: Res<Time>,
-    mut query: Query<(&mut Spatial, &SteeringControl)>,
+    mut query: Query<(&mut AngularVelocity, &SteeringControl)>,
 ) {
-    for (mut spatial, steering) in query.iter_mut() {
+    for (mut angular_velocity, steering) in query.iter_mut() {
         if keyboard_input.pressed(KeyCode::Left) {
-            spatial.rotation += steering.0.get() * time.delta_seconds();
-        }
-        if keyboard_input.pressed(KeyCode::Right) {
-            spatial.rotation -= steering.0.get() * time.delta_seconds();
+            angular_velocity.0 = steering.0.get();
+        } else if keyboard_input.pressed(KeyCode::Right) {
+            angular_velocity.0 = -steering.0.get();
+        } else {
+            angular_velocity.0 = 0.0;
         }
     }
 }
