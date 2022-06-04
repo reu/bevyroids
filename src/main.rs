@@ -12,12 +12,14 @@ use bevy_prototype_lyon::{
     shapes::Polygon,
 };
 use collision::{Collidable, CollisionPlugin, CollisionSystemLabel, HitEvent};
+use flickering::{Flick, FlickPlugin};
 use physics::{AngularVelocity, Damping, PhysicsPlugin, PhysicsSystemLabel, SpeedLimit, Velocity};
 use rand::Rng;
 use random::{Random, RandomPlugin};
 use spatial::{Spatial, SpatialPlugin};
 
 mod collision;
+mod flickering;
 mod physics;
 mod random;
 mod spatial;
@@ -43,6 +45,7 @@ fn main() {
         .add_plugin(PhysicsPlugin::with_fixed_time_step(1.0 / 120.0))
         .add_plugin(CollisionPlugin::<Bullet, Asteroid>::new())
         .add_plugin(CollisionPlugin::<Asteroid, Ship>::new())
+        .add_plugin(FlickPlugin)
         .add_startup_system(setup_system)
         .add_system_set(
             SystemSet::new()
@@ -58,8 +61,6 @@ fn main() {
         .add_system(asteroid_generation_system)
         .add_system(expiration_system)
         .add_system(explosion_system)
-        .add_system(flick_system)
-        .add_system_to_stage(CoreStage::PostUpdate, flick_removed_system)
         .add_system(ship_state_system)
         .add_system_set(
             SystemSet::new()
@@ -119,15 +120,6 @@ struct Expiration(Timer);
 impl Expiration {
     pub fn new(duration: Duration) -> Self {
         Self(Timer::new(duration, false))
-    }
-}
-
-#[derive(Debug, Component)]
-struct Flick(Timer);
-
-impl Flick {
-    pub fn new(frequency: Duration) -> Self {
-        Self(Timer::new(frequency, true))
     }
 }
 
@@ -451,24 +443,6 @@ fn expiration_system(
 
         if expiration.0.finished() {
             commands.entity(entity).despawn();
-        }
-    }
-}
-
-fn flick_system(time: Res<Time>, mut query: Query<(&mut Flick, &mut Visibility)>) {
-    for (mut flick, mut visibility) in query.iter_mut() {
-        flick.0.tick(time.delta());
-
-        if flick.0.finished() {
-            visibility.is_visible = !visibility.is_visible;
-        }
-    }
-}
-
-fn flick_removed_system(removed: RemovedComponents<Flick>, mut query: Query<&mut Visibility>) {
-    for entity in removed.iter() {
-        if let Ok(mut visibility) = query.get_mut(entity) {
-            visibility.is_visible = true;
         }
     }
 }
