@@ -1,0 +1,34 @@
+use std::time::Duration;
+
+use bevy::prelude::*;
+
+pub struct ExpirationPlugin;
+
+impl Plugin for ExpirationPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_system_to_stage(CoreStage::PreUpdate, expiration_system);
+    }
+}
+
+#[derive(Debug, Component, Deref, DerefMut)]
+pub struct Expiration(Timer);
+
+impl Expiration {
+    pub fn new(duration: Duration) -> Self {
+        Self(Timer::new(duration, false))
+    }
+}
+
+fn expiration_system(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Expiration)>,
+) {
+    for (entity, mut expiration) in query.iter_mut() {
+        expiration.0.tick(time.delta());
+
+        if expiration.0.finished() {
+            commands.entity(entity).despawn();
+        }
+    }
+}

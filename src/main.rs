@@ -13,6 +13,7 @@ use bevy_prototype_lyon::{
 };
 use boundary::{BoundaryPlugin, BoundaryRemoval, BoundaryWrap};
 use collision::{Collidable, CollisionPlugin, CollisionSystemLabel, HitEvent};
+use expiration::{Expiration, ExpirationPlugin};
 use flickering::{Flick, FlickPlugin};
 use physics::{AngularVelocity, Damping, PhysicsPlugin, PhysicsSystemLabel, SpeedLimit, Velocity};
 use rand::Rng;
@@ -21,6 +22,7 @@ use spatial::{Spatial, SpatialPlugin};
 
 mod boundary;
 mod collision;
+mod expiration;
 mod flickering;
 mod physics;
 mod random;
@@ -48,6 +50,7 @@ fn main() {
         .add_plugin(CollisionPlugin::<Bullet, Asteroid>::new())
         .add_plugin(CollisionPlugin::<Asteroid, Ship>::new())
         .add_plugin(BoundaryPlugin)
+        .add_plugin(ExpirationPlugin)
         .add_plugin(FlickPlugin)
         .add_startup_system(setup_system)
         .add_system_set(
@@ -62,7 +65,6 @@ fn main() {
         .add_system(thrust_system.after("input").before(PhysicsSystemLabel))
         .add_system(asteroid_spawn_system.with_run_criteria(FixedTimestep::step(0.5)))
         .add_system(asteroid_generation_system)
-        .add_system(expiration_system)
         .add_system(explosion_system)
         .add_system(ship_state_system)
         .add_system(asteroid_hit_system.after(CollisionSystemLabel))
@@ -107,15 +109,6 @@ impl Weapon {
             cooldown: Timer::new(rate_of_fire, true),
             ..Default::default()
         }
-    }
-}
-
-#[derive(Debug, Component)]
-struct Expiration(Timer);
-
-impl Expiration {
-    pub fn new(duration: Duration) -> Self {
-        Self(Timer::new(duration, false))
     }
 }
 
@@ -420,20 +413,6 @@ fn asteroid_generation_system(
             .insert(Velocity::from(velocity))
             .insert(AngularVelocity::from(rng.gen_range(-3.0..3.0)))
             .insert(BoundaryRemoval);
-    }
-}
-
-fn expiration_system(
-    time: Res<Time>,
-    mut commands: Commands,
-    mut query: Query<(Entity, &mut Expiration)>,
-) {
-    for (entity, mut expiration) in query.iter_mut() {
-        expiration.0.tick(time.delta());
-
-        if expiration.0.finished() {
-            commands.entity(entity).despawn();
-        }
     }
 }
 
