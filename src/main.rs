@@ -2,7 +2,7 @@
 
 use std::{f32::consts::PI, ops::Range, time::Duration};
 
-use bevy::{core::FixedTimestep, prelude::*, window::PresentMode};
+use bevy::{core::FixedTimestep, prelude::*, utils::HashSet, window::PresentMode};
 use bevy_prototype_lyon::{
     entity::ShapeBundle,
     prelude::{
@@ -497,9 +497,15 @@ fn asteroid_hit_system(
     mut commands: Commands,
     query: Query<&Spatial, With<Asteroid>>,
 ) {
+    let mut removed = HashSet::with_capacity(asteroid_hits.len());
+
     for hit in asteroid_hits.iter() {
         let asteroid = hit.hurtable();
         let bullet = hit.hittable();
+
+        if removed.contains(&asteroid) || removed.contains(&bullet) {
+            continue;
+        }
 
         if let Ok(spatial) = query.get(asteroid) {
             if asteroid_sizes.big.contains(&spatial.radius) {
@@ -544,5 +550,8 @@ fn asteroid_hit_system(
 
         commands.entity(asteroid).despawn();
         commands.entity(bullet).despawn();
+
+        removed.insert(asteroid);
+        removed.insert(bullet);
     }
 }

@@ -6,7 +6,8 @@ pub struct BoundaryPlugin;
 
 impl Plugin for BoundaryPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set(
+        app.add_system_set_to_stage(
+            CoreStage::PostUpdate,
             SystemSet::new()
                 .with_system(boundary_remove_system)
                 .with_system(boundary_wrap_system),
