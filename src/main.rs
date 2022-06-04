@@ -2,6 +2,7 @@ use std::{f32::consts::PI, marker::PhantomData, ops::Range, time::Duration};
 
 use bevy::{core::FixedTimestep, prelude::*, window::PresentMode};
 use bevy_prototype_lyon::{
+    entity::ShapeBundle,
     prelude::{
         tess::{geom::Rotation, math::Angle},
         *,
@@ -43,6 +44,9 @@ fn main() {
         .add_system(thrust_system.after("input").before("physics"))
         .add_system(asteroid_spawn_system.with_run_criteria(FixedTimestep::step(0.5)))
         .add_system(asteroid_generation_system)
+        .add_system(expiration_system)
+        .add_system(explosion_system)
+        .add_system(flick_system)
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(TIME_STEP.into()))
@@ -143,6 +147,24 @@ impl Weapon {
     }
 }
 
+#[derive(Debug, Component)]
+struct Expiration(Timer);
+
+impl Expiration {
+    pub fn new(duration: Duration) -> Self {
+        Self(Timer::new(duration, false))
+    }
+}
+
+#[derive(Debug, Component)]
+struct Flick(Timer);
+
+impl Flick {
+    pub fn new(frequency: Duration) -> Self {
+        Self(Timer::new(frequency, true))
+    }
+}
+
 #[derive(Debug, Component, Default)]
 struct BoundaryWrap;
 
@@ -156,6 +178,9 @@ struct Ship;
 struct Bullet;
 
 #[derive(Debug, Component, Default)]
+struct Explosion;
+
+#[derive(Debug, Component, Default)]
 struct Asteroid;
 
 #[derive(Debug, Deref)]
@@ -165,6 +190,37 @@ struct AsteroidSpawnEvent(Spatial);
 struct HitEvent<A, B> {
     entities: (Entity, Entity),
     _phantom: PhantomData<(A, B)>,
+}
+
+#[derive(Bundle)]
+struct ExplosionBundle {
+    #[bundle]
+    shape_bundle: ShapeBundle,
+    explosion: Explosion,
+    spatial: Spatial,
+    velocity: Velocity,
+    damping: Damping,
+    expiration: Expiration,
+}
+
+impl Default for ExplosionBundle {
+    fn default() -> Self {
+        Self {
+            shape_bundle: GeometryBuilder::build_as(
+                &shapes::Circle {
+                    radius: 1.0,
+                    center: Vec2::ZERO,
+                },
+                DrawMode::Fill(FillMode::color(Color::BLACK)),
+                Transform::default(),
+            ),
+            explosion: Explosion::default(),
+            spatial: Spatial::default(),
+            velocity: Velocity::default(),
+            damping: Damping(0.97),
+            expiration: Expiration::new(Duration::from_secs(1)),
+        }
+    }
 }
 
 fn hit_event<A, B>(e1: Entity, e2: Entity) -> HitEvent<A, B> {
@@ -399,6 +455,30 @@ fn asteroid_generation_system(
     }
 }
 
+fn expiration_system(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Expiration)>,
+) {
+    for (entity, mut expiration) in query.iter_mut() {
+        expiration.0.tick(time.delta());
+
+        if expiration.0.finished() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn flick_system(time: Res<Time>, mut query: Query<(&mut Flick, &mut Visibility)>) {
+    for (mut flick, mut visibility) in query.iter_mut() {
+        flick.0.tick(time.delta());
+
+        if flick.0.finished() {
+            visibility.is_visible = !visibility.is_visible;
+        }
+    }
+}
+
 fn boundary_wrap_system(
     window: Res<WindowDescriptor>,
     mut query: Query<&mut Spatial, With<BoundaryWrap>>,
@@ -465,6 +545,14 @@ fn weapon_control_system(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&
     }
 }
 
+fn explosion_system(mut query: Query<&mut Transform, With<Explosion>>) {
+    for mut transform in query.iter_mut() {
+        transform.scale.x += 0.001;
+        transform.scale.y += 0.001;
+        transform.scale.z += 0.001;
+    }
+}
+
 fn drawing_system(mut query: Query<(&mut Transform, &Spatial)>) {
     for (mut transform, spatial) in query.iter_mut() {
         transform.translation.x = spatial.position.x;
@@ -502,6 +590,27 @@ fn asteroid_hit_system(
                 };
                 asteroid_spawn.send(AsteroidSpawnEvent(spatial.clone()));
                 asteroid_spawn.send(AsteroidSpawnEvent(spatial.clone()));
+            }
+
+            for n in 0..12 {
+                let angle = 2.0 * PI / 12.0 * n as f32 + rng.gen_range(0.0..2.0 * PI / 12.0);
+                let direction = Vec2::new(angle.cos(), angle.sin());
+                let position = direction * rng.gen_range(1.0..20.0) + spatial.position;
+
+                commands
+                    .spawn_bundle(ExplosionBundle::default())
+                    .insert(Spatial {
+                        position,
+                        radius: 1.0,
+                        ..spatial.clone()
+                    })
+                    .insert(Velocity(
+                        Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(50.0..100.0),
+                    ))
+                    .insert(Expiration::new(Duration::from_millis(
+                        rng.gen_range(400..700),
+                    )))
+                    .insert(Flick::new(Duration::from_millis(rng.gen_range(20..30))));
             }
         }
 
