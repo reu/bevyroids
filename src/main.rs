@@ -61,8 +61,8 @@ fn main() {
                 .with_system(thrust_control_system)
                 .with_system(weapon_control_system),
         )
-        .add_system(weapon_system.after("input").before(PhysicsSystemLabel))
-        .add_system(thrust_system.after("input").before(PhysicsSystemLabel))
+        .add_system(weapon_system.after("input"))
+        .add_system(thrust_system.after("input"))
         .add_system(asteroid_spawn_system.with_run_criteria(FixedTimestep::step(0.5)))
         .add_system(asteroid_generation_system)
         .add_system(explosion_system)
