@@ -1,6 +1,6 @@
 #![allow(clippy::type_complexity)]
 
-use std::{f32::consts::PI, marker::PhantomData, ops::Range, time::Duration};
+use std::{f32::consts::PI, ops::Range, time::Duration};
 
 use bevy::{core::FixedTimestep, prelude::*, window::PresentMode};
 use bevy_prototype_lyon::{
@@ -11,7 +11,12 @@ use bevy_prototype_lyon::{
     },
     shapes::Polygon,
 };
+use collision::{Collidable, CollisionPlugin, HitEvent, CollisionSystemLabel};
 use rand::{prelude::SmallRng, Rng, SeedableRng};
+use spatial::{Spatial, SpatialPlugin};
+
+mod collision;
+mod spatial;
 
 const TIME_STEP: f32 = 1.0 / 120.0;
 
@@ -32,8 +37,9 @@ fn main() {
             small: 10.0..20.0,
         })
         .add_event::<AsteroidSpawnEvent>()
-        .add_event::<HitEvent<Asteroid, Bullet>>()
-        .add_event::<HitEvent<Asteroid, Ship>>()
+        .add_plugin(SpatialPlugin)
+        .add_plugin(CollisionPlugin::<Bullet, Asteroid>::new())
+        .add_plugin(CollisionPlugin::<Asteroid, Ship>::new())
         .add_startup_system(setup_system)
         .add_system_set(
             SystemSet::new()
@@ -67,10 +73,8 @@ fn main() {
                 .with_system(boundary_remove_system)
                 .with_system(boundary_wrap_system),
         )
-        .add_system(collision_system)
-        .add_system(asteroid_hit_system.after(collision_system))
-        .add_system(ship_hit_system.after(collision_system))
-        .add_system(drawing_system.after("wrap"))
+        .add_system(asteroid_hit_system.after(CollisionSystemLabel))
+        .add_system(ship_hit_system.after(CollisionSystemLabel))
         .run();
 }
 
@@ -91,20 +95,6 @@ struct AsteroidSizes {
     big: Range<f32>,
     medium: Range<f32>,
     small: Range<f32>,
-}
-
-#[derive(Debug, Component, Default, Clone)]
-struct Spatial {
-    position: Vec2,
-    rotation: f32,
-    radius: f32,
-}
-
-impl Spatial {
-    fn intersects(&self, other: &Spatial) -> bool {
-        let distance = (self.position - other.position).length();
-        distance < self.radius + other.radius
-    }
 }
 
 #[derive(Debug, Component, Default)]
@@ -177,7 +167,7 @@ struct BoundaryWrap;
 struct BoundaryRemoval;
 
 #[derive(Debug, Component, Default)]
-struct Ship {
+pub struct Ship {
     state: ShipState,
 }
 
@@ -214,26 +204,17 @@ impl Default for ShipState {
     }
 }
 
-#[derive(Debug, Component)]
-struct Collidable;
-
 #[derive(Debug, Component, Default)]
-struct Bullet;
+pub struct Bullet;
 
 #[derive(Debug, Component, Default)]
 struct Explosion;
 
 #[derive(Debug, Component, Default)]
-struct Asteroid;
+pub struct Asteroid;
 
 #[derive(Debug, Deref)]
 struct AsteroidSpawnEvent(Spatial);
-
-#[derive(Debug)]
-struct HitEvent<A, B> {
-    entities: (Entity, Entity),
-    _phantom: PhantomData<(A, B)>,
-}
 
 #[derive(Bundle)]
 struct ExplosionBundle {
@@ -263,13 +244,6 @@ impl Default for ExplosionBundle {
             damping: Damping(0.97),
             expiration: Expiration::new(Duration::from_secs(1)),
         }
-    }
-}
-
-fn hit_event<A, B>(e1: Entity, e2: Entity) -> HitEvent<A, B> {
-    HitEvent {
-        entities: (e1, e2),
-        _phantom: PhantomData,
     }
 }
 
@@ -347,30 +321,6 @@ fn weapon_system(
                 })
                 .insert(Velocity(bullet_vel))
                 .insert(BoundaryRemoval);
-        }
-    }
-}
-
-fn collision_system(
-    mut asteroid_hits: EventWriter<HitEvent<Asteroid, Bullet>>,
-    mut ship_hits: EventWriter<HitEvent<Asteroid, Ship>>,
-    ships: Query<(Entity, &Spatial), (With<Collidable>, With<Ship>)>,
-    asteroids: Query<(Entity, &Spatial), (With<Collidable>, With<Asteroid>)>,
-    bullets: Query<(Entity, &Spatial), (With<Collidable>, With<Bullet>)>,
-) {
-    for (bullet_entity, bullet) in bullets.iter() {
-        for (asteroid_entity, asteroid) in asteroids.iter() {
-            if bullet.intersects(asteroid) {
-                asteroid_hits.send(hit_event(asteroid_entity, bullet_entity))
-            }
-        }
-    }
-
-    for (ship_entity, ship) in ships.iter() {
-        for (asteroid_entity, asteroid) in asteroids.iter() {
-            if ship.intersects(asteroid) {
-                ship_hits.send(hit_event(asteroid_entity, ship_entity));
-            }
         }
     }
 }
@@ -649,14 +599,6 @@ fn explosion_system(mut query: Query<&mut Transform, With<Explosion>>) {
     }
 }
 
-fn drawing_system(mut query: Query<(&mut Transform, &Spatial)>) {
-    for (mut transform, spatial) in query.iter_mut() {
-        transform.translation.x = spatial.position.x;
-        transform.translation.y = spatial.position.y;
-        transform.rotation = Quat::from_rotation_z(spatial.rotation);
-    }
-}
-
 fn ship_hit_system(
     mut rng: Local<Random>,
     mut ship_hits: EventReader<HitEvent<Asteroid, Ship>>,
@@ -664,7 +606,7 @@ fn ship_hit_system(
     query: Query<&Spatial, With<Ship>>,
 ) {
     for hit in ship_hits.iter() {
-        let ship = hit.entities.1;
+        let ship = hit.hurtable();
 
         if let Ok(spatial) = query.get(ship) {
             for n in 0..12 * 6 {
@@ -698,14 +640,14 @@ fn ship_hit_system(
 fn asteroid_hit_system(
     asteroid_sizes: Res<AsteroidSizes>,
     mut rng: Local<Random>,
-    mut asteroid_hits: EventReader<HitEvent<Asteroid, Bullet>>,
+    mut asteroid_hits: EventReader<HitEvent<Bullet, Asteroid>>,
     mut asteroid_spawn: EventWriter<AsteroidSpawnEvent>,
     mut commands: Commands,
     query: Query<&Spatial, With<Asteroid>>,
 ) {
     for hit in asteroid_hits.iter() {
-        let asteroid = hit.entities.0;
-        let bullet = hit.entities.1;
+        let asteroid = hit.hurtable();
+        let bullet = hit.hittable();
 
         if let Ok(spatial) = query.get(asteroid) {
             if asteroid_sizes.big.contains(&spatial.radius) {
