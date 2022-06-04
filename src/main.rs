@@ -13,11 +13,13 @@ use bevy_prototype_lyon::{
 };
 use collision::{Collidable, CollisionPlugin, CollisionSystemLabel, HitEvent};
 use physics::{AngularVelocity, Damping, PhysicsPlugin, PhysicsSystemLabel, SpeedLimit, Velocity};
-use rand::{prelude::SmallRng, Rng, SeedableRng};
+use rand::Rng;
+use random::{Random, RandomPlugin};
 use spatial::{Spatial, SpatialPlugin};
 
 mod collision;
 mod physics;
+mod random;
 mod spatial;
 
 fn main() {
@@ -30,13 +32,13 @@ fn main() {
         .insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins)
         .add_plugin(ShapePlugin)
-        .insert_resource(Random(SmallRng::from_entropy()))
         .insert_resource(AsteroidSizes {
             big: 50.0..60.0,
             medium: 30.0..40.0,
             small: 10.0..20.0,
         })
         .add_event::<AsteroidSpawnEvent>()
+        .add_plugin(RandomPlugin)
         .add_plugin(SpatialPlugin)
         .add_plugin(PhysicsPlugin::with_fixed_time_step(1.0 / 120.0))
         .add_plugin(CollisionPlugin::<Bullet, Asteroid>::new())
@@ -69,18 +71,6 @@ fn main() {
         .add_system(asteroid_hit_system.after(CollisionSystemLabel))
         .add_system(ship_hit_system.after(CollisionSystemLabel))
         .run();
-}
-
-#[derive(Debug, Deref, DerefMut)]
-struct Random(SmallRng);
-
-impl FromWorld for Random {
-    fn from_world(world: &mut World) -> Self {
-        let rng = world
-            .get_resource_mut::<Random>()
-            .expect("Random resource not found");
-        Random(SmallRng::from_rng(rng.clone()).unwrap())
-    }
 }
 
 #[derive(Debug, Clone)]
