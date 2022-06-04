@@ -12,10 +12,6 @@ use rand::{prelude::SmallRng, Rng, SeedableRng};
 
 const TIME_STEP: f32 = 1.0 / 120.0;
 
-const BIG_ASTEROID: Range<f32> = 50.0..60.0;
-const MEDIUM_ASTEROID: Range<f32> = 30.0..40.0;
-const SMALL_ASTEROID: Range<f32> = 10.0..20.0;
-
 fn main() {
     App::new()
         .insert_resource(WindowDescriptor {
@@ -27,6 +23,11 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(ShapePlugin)
         .insert_resource(Random(SmallRng::from_entropy()))
+        .insert_resource(AsteroidSizes {
+            big: 50.0..60.0,
+            medium: 30.0..40.0,
+            small: 10.0..20.0,
+        })
         .add_event::<AsteroidSpawnEvent>()
         .add_event::<HitEvent<Asteroid, Bullet>>()
         .add_event::<HitEvent<Asteroid, Ship>>()
@@ -59,7 +60,7 @@ fn main() {
                 .with_system(boundary_wrap_system),
         )
         .add_system(collision_system)
-        .add_system(asteroid_hit_system)
+        .add_system(asteroid_hit_system.after(collision_system))
         .add_system(drawing_system.after("wrap"))
         .run();
 }
@@ -74,6 +75,13 @@ impl FromWorld for Random {
             .expect("Random resource not found");
         Random(SmallRng::from_rng(rng.clone()).unwrap())
     }
+}
+
+#[derive(Debug, Clone)]
+struct AsteroidSizes {
+    big: Range<f32>,
+    medium: Range<f32>,
+    small: Range<f32>,
 }
 
 #[derive(Debug, Component, Default, Clone)]
@@ -303,6 +311,7 @@ fn collision_system(
 
 fn asteroid_spawn_system(
     window: Res<WindowDescriptor>,
+    asteroid_sizes: Res<AsteroidSizes>,
     mut rng: Local<Random>,
     mut asteroids: EventWriter<AsteroidSpawnEvent>,
 ) {
@@ -313,9 +322,9 @@ fn asteroid_spawn_system(
         let x = rng.gen_range(-w..w);
         let y = rng.gen_range(-h..h);
         let radius = match rng.gen_range(1..=3) {
-            3 => rng.gen_range(BIG_ASTEROID),
-            2 => rng.gen_range(MEDIUM_ASTEROID),
-            _ => rng.gen_range(SMALL_ASTEROID),
+            3 => rng.gen_range(asteroid_sizes.big.clone()),
+            2 => rng.gen_range(asteroid_sizes.medium.clone()),
+            _ => rng.gen_range(asteroid_sizes.small.clone()),
         };
         let c = radius * 2.0;
 
@@ -335,6 +344,7 @@ fn asteroid_spawn_system(
 
 fn asteroid_generation_system(
     window: Res<WindowDescriptor>,
+    asteroid_sizes: Res<AsteroidSizes>,
     mut rng: Local<Random>,
     mut asteroids: EventReader<AsteroidSpawnEvent>,
     mut commands: Commands,
@@ -346,9 +356,9 @@ fn asteroid_generation_system(
         let position = asteroid.position;
 
         let velocity = Vec2::new(rng.gen_range(-w..w), rng.gen_range(-h..h));
-        let scale = if BIG_ASTEROID.contains(&asteroid.radius) {
+        let scale = if asteroid_sizes.big.contains(&asteroid.radius) {
             rng.gen_range(30.0..60.0)
-        } else if MEDIUM_ASTEROID.contains(&asteroid.radius) {
+        } else if asteroid_sizes.medium.contains(&asteroid.radius) {
             rng.gen_range(60.0..80.0)
         } else {
             rng.gen_range(80.0..100.0)
@@ -464,6 +474,7 @@ fn drawing_system(mut query: Query<(&mut Transform, &Spatial)>) {
 }
 
 fn asteroid_hit_system(
+    asteroid_sizes: Res<AsteroidSizes>,
     mut rng: Local<Random>,
     mut asteroid_hits: EventReader<HitEvent<Asteroid, Bullet>>,
     mut asteroid_spawn: EventWriter<AsteroidSpawnEvent>,
@@ -475,18 +486,18 @@ fn asteroid_hit_system(
         let bullet = hit.entities.1;
 
         if let Ok(spatial) = query.get(asteroid) {
-            if BIG_ASTEROID.contains(&spatial.radius) {
+            if asteroid_sizes.big.contains(&spatial.radius) {
                 let spatial = Spatial {
-                    radius: rng.gen_range(MEDIUM_ASTEROID),
+                    radius: rng.gen_range(asteroid_sizes.medium.clone()),
                     ..spatial.clone()
                 };
 
                 asteroid_spawn.send(AsteroidSpawnEvent(spatial.clone()));
                 asteroid_spawn.send(AsteroidSpawnEvent(spatial.clone()));
                 asteroid_spawn.send(AsteroidSpawnEvent(spatial.clone()));
-            } else if MEDIUM_ASTEROID.contains(&spatial.radius) {
+            } else if asteroid_sizes.medium.contains(&spatial.radius) {
                 let spatial = Spatial {
-                    radius: rng.gen_range(SMALL_ASTEROID),
+                    radius: rng.gen_range(asteroid_sizes.small.clone()),
                     ..spatial.clone()
                 };
                 asteroid_spawn.send(AsteroidSpawnEvent(spatial.clone()));
