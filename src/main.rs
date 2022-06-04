@@ -215,7 +215,7 @@ impl Default for ShipState {
 }
 
 #[derive(Debug, Component)]
-struct Invincibility;
+struct Collidable;
 
 #[derive(Debug, Component, Default)]
 struct Bullet;
@@ -339,6 +339,7 @@ fn weapon_system(
                     )),
                 ))
                 .insert(Bullet)
+                .insert(Collidable)
                 .insert(Spatial {
                     position: bullet_pos,
                     rotation: 0.0,
@@ -353,9 +354,9 @@ fn weapon_system(
 fn collision_system(
     mut asteroid_hits: EventWriter<HitEvent<Asteroid, Bullet>>,
     mut ship_hits: EventWriter<HitEvent<Asteroid, Ship>>,
-    ships: Query<(Entity, &Spatial), (With<Ship>, Without<Invincibility>)>,
-    asteroids: Query<(Entity, &Spatial), (With<Asteroid>, Without<Invincibility>)>,
-    bullets: Query<(Entity, &Spatial), (With<Bullet>, Without<Invincibility>)>,
+    ships: Query<(Entity, &Spatial), (With<Collidable>, With<Ship>)>,
+    asteroids: Query<(Entity, &Spatial), (With<Collidable>, With<Asteroid>)>,
+    bullets: Query<(Entity, &Spatial), (With<Collidable>, With<Bullet>)>,
 ) {
     for (bullet_entity, bullet) in bullets.iter() {
         for (asteroid_entity, asteroid) in asteroids.iter() {
@@ -391,7 +392,7 @@ fn ship_state_system(
                         .remove::<SteeringControl>()
                         .remove::<Weapon>()
                         .remove::<ThrustEngine>()
-                        .insert(Invincibility);
+                        .remove::<Collidable>();
                 }
 
                 timer.tick(time.delta());
@@ -432,7 +433,6 @@ fn ship_state_system(
                         .insert(AngularVelocity::default())
                         .insert(SteeringControl(Angle::degrees(180.0)))
                         .insert(BoundaryWrap)
-                        .insert(Invincibility)
                         .insert(Flick::new(Duration::from_millis(80)));
                 }
 
@@ -444,7 +444,7 @@ fn ship_state_system(
                     commands
                         .entity(entity)
                         .insert(Weapon::new(Duration::from_millis(100)))
-                        .remove::<Invincibility>()
+                        .insert(Collidable)
                         .remove::<Flick>();
                 }
             }
@@ -535,6 +535,7 @@ fn asteroid_generation_system(
                 Transform::default().with_translation(Vec3::new(position.x, position.y, 0.0)),
             ))
             .insert(Asteroid)
+            .insert(Collidable)
             .insert(asteroid.0.clone())
             .insert(Velocity(velocity))
             .insert(AngularVelocity(rng.gen_range(-3.0..3.0)))
