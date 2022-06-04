@@ -15,4 +15,5 @@ lto = "thin"
 [dependencies]
 bevy = { version = "0.7.0", features = ["dynamic"] }
 bevy_prototype_lyon = "0.5.0"
+derive_more = "0.99.17"
 rand = { version = "0.8.5", features = ["small_rng"] }

@@ -23,8 +23,7 @@ impl<Hittable: Component, Hurtable: Component> Plugin for CollisionPlugin<Hittab
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[derive(SystemLabel)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemLabel)]
 pub struct CollisionSystemLabel;
 
 #[derive(Debug)]

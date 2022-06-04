@@ -11,14 +11,14 @@ use bevy_prototype_lyon::{
     },
     shapes::Polygon,
 };
-use collision::{Collidable, CollisionPlugin, HitEvent, CollisionSystemLabel};
+use collision::{Collidable, CollisionPlugin, CollisionSystemLabel, HitEvent};
+use physics::{AngularVelocity, Damping, PhysicsPlugin, PhysicsSystemLabel, SpeedLimit, Velocity};
 use rand::{prelude::SmallRng, Rng, SeedableRng};
 use spatial::{Spatial, SpatialPlugin};
 
 mod collision;
+mod physics;
 mod spatial;
-
-const TIME_STEP: f32 = 1.0 / 120.0;
 
 fn main() {
     App::new()
@@ -38,18 +38,20 @@ fn main() {
         })
         .add_event::<AsteroidSpawnEvent>()
         .add_plugin(SpatialPlugin)
+        .add_plugin(PhysicsPlugin::with_fixed_time_step(1.0 / 120.0))
         .add_plugin(CollisionPlugin::<Bullet, Asteroid>::new())
         .add_plugin(CollisionPlugin::<Asteroid, Ship>::new())
         .add_startup_system(setup_system)
         .add_system_set(
             SystemSet::new()
                 .label("input")
+                .before(PhysicsSystemLabel)
                 .with_system(steering_control_system)
                 .with_system(thrust_control_system)
                 .with_system(weapon_control_system),
         )
-        .add_system(weapon_system.after("input").before("physics"))
-        .add_system(thrust_system.after("input").before("physics"))
+        .add_system(weapon_system.after("input").before(PhysicsSystemLabel))
+        .add_system(thrust_system.after("input").before(PhysicsSystemLabel))
         .add_system(asteroid_spawn_system.with_run_criteria(FixedTimestep::step(0.5)))
         .add_system(asteroid_generation_system)
         .add_system(expiration_system)
@@ -59,17 +61,8 @@ fn main() {
         .add_system(ship_state_system)
         .add_system_set(
             SystemSet::new()
-                .with_run_criteria(FixedTimestep::step(TIME_STEP.into()))
-                .label("physics")
-                .after("input")
-                .with_system(damping_system.before(movement_system))
-                .with_system(speed_limit_system.before(movement_system))
-                .with_system(movement_system),
-        )
-        .add_system_set(
-            SystemSet::new()
                 .label("wrap")
-                .after("physics")
+                .after(PhysicsSystemLabel)
                 .with_system(boundary_remove_system)
                 .with_system(boundary_wrap_system),
         )
@@ -96,18 +89,6 @@ struct AsteroidSizes {
     medium: Range<f32>,
     small: Range<f32>,
 }
-
-#[derive(Debug, Component, Default)]
-struct Velocity(Vec2);
-
-#[derive(Debug, Component, Default)]
-struct AngularVelocity(f32);
-
-#[derive(Debug, Component, Default)]
-struct SpeedLimit(f32);
-
-#[derive(Debug, Component, Default)]
-struct Damping(f32);
 
 #[derive(Debug, Component, Default)]
 struct ThrustEngine {
@@ -241,7 +222,7 @@ impl Default for ExplosionBundle {
             explosion: Explosion::default(),
             spatial: Spatial::default(),
             velocity: Velocity::default(),
-            damping: Damping(0.97),
+            damping: Damping::from(0.97),
             expiration: Expiration::new(Duration::from_secs(1)),
         }
     }
@@ -252,34 +233,11 @@ fn setup_system(mut commands: Commands) {
     commands.spawn().insert(Ship::spawn(Duration::from_secs(0)));
 }
 
-fn movement_system(mut query: Query<(&mut Spatial, Option<&Velocity>, Option<&AngularVelocity>)>) {
-    for (mut spatial, velocity, angular_velocity) in query.iter_mut() {
-        if let Some(velocity) = velocity {
-            spatial.position += velocity.0 * TIME_STEP;
-        }
-        if let Some(angular_velocity) = angular_velocity {
-            spatial.rotation += angular_velocity.0 * TIME_STEP;
-        }
-    }
-}
-
-fn speed_limit_system(mut query: Query<(&mut Velocity, &SpeedLimit)>) {
-    for (mut velocity, speed_limit) in query.iter_mut() {
-        velocity.0 = velocity.0.clamp_length_max(speed_limit.0);
-    }
-}
-
-fn damping_system(mut query: Query<(&mut Velocity, &Damping)>) {
-    for (mut velocity, damping) in query.iter_mut() {
-        velocity.0 *= damping.0;
-    }
-}
-
 fn thrust_system(mut query: Query<(&mut Velocity, &ThrustEngine, &Spatial)>) {
     for (mut velocity, thrust, spatial) in query.iter_mut() {
         if thrust.on {
-            velocity.0.x += spatial.rotation.cos() * thrust.force;
-            velocity.0.y += spatial.rotation.sin() * thrust.force;
+            velocity.x += spatial.rotation.cos() * thrust.force;
+            velocity.y += spatial.rotation.sin() * thrust.force;
         }
     }
 }
@@ -319,7 +277,7 @@ fn weapon_system(
                     rotation: 0.0,
                     radius: 2.0,
                 })
-                .insert(Velocity(bullet_vel))
+                .insert(Velocity::from(bullet_vel))
                 .insert(BoundaryRemoval);
         }
     }
@@ -377,8 +335,8 @@ fn ship_state_system(
                             radius: 12.0,
                         })
                         .insert(Velocity::default())
-                        .insert(SpeedLimit(350.0))
-                        .insert(Damping(0.998))
+                        .insert(SpeedLimit::from(350.0))
+                        .insert(Damping::from(0.998))
                         .insert(ThrustEngine::new(1.5))
                         .insert(AngularVelocity::default())
                         .insert(SteeringControl(Angle::degrees(180.0)))
@@ -487,8 +445,8 @@ fn asteroid_generation_system(
             .insert(Asteroid)
             .insert(Collidable)
             .insert(asteroid.0.clone())
-            .insert(Velocity(velocity))
-            .insert(AngularVelocity(rng.gen_range(-3.0..3.0)))
+            .insert(Velocity::from(velocity))
+            .insert(AngularVelocity::from(rng.gen_range(-3.0..3.0)))
             .insert(BoundaryRemoval);
     }
 }
@@ -570,11 +528,11 @@ fn steering_control_system(
 ) {
     for (mut angular_velocity, steering) in query.iter_mut() {
         if keyboard_input.pressed(KeyCode::Left) {
-            angular_velocity.0 = steering.0.get();
+            *angular_velocity = AngularVelocity::from(steering.0.get());
         } else if keyboard_input.pressed(KeyCode::Right) {
-            angular_velocity.0 = -steering.0.get();
+            *angular_velocity = AngularVelocity::from(-steering.0.get());
         } else {
-            angular_velocity.0 = 0.0;
+            *angular_velocity = AngularVelocity::from(0.0);
         }
     }
 }
@@ -625,7 +583,7 @@ fn ship_hit_system(
                         radius: 1.0,
                         ..spatial.clone()
                     })
-                    .insert(Velocity(
+                    .insert(Velocity::from(
                         Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(150.0..250.0),
                     ))
                     .insert(Expiration::new(Duration::from_millis(
@@ -680,7 +638,7 @@ fn asteroid_hit_system(
                         radius: 1.0,
                         ..spatial.clone()
                     })
-                    .insert(Velocity(
+                    .insert(Velocity::from(
                         Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(50.0..100.0),
                     ))
                     .insert(Expiration::new(Duration::from_millis(
