@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 use std::{f32::consts::PI, marker::PhantomData, ops::Range, time::Duration};
 
 use bevy::{core::FixedTimestep, prelude::*, window::PresentMode};
@@ -47,6 +49,8 @@ fn main() {
         .add_system(expiration_system)
         .add_system(explosion_system)
         .add_system(flick_system)
+        .add_system_to_stage(CoreStage::PostUpdate, flick_removed_system)
+        .add_system(ship_state_system)
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(TIME_STEP.into()))
@@ -65,6 +69,7 @@ fn main() {
         )
         .add_system(collision_system)
         .add_system(asteroid_hit_system.after(collision_system))
+        .add_system(ship_hit_system.after(collision_system))
         .add_system(drawing_system.after("wrap"))
         .run();
 }
@@ -172,7 +177,45 @@ struct BoundaryWrap;
 struct BoundaryRemoval;
 
 #[derive(Debug, Component, Default)]
-struct Ship;
+struct Ship {
+    state: ShipState,
+}
+
+impl Ship {
+    fn alive() -> Self {
+        Ship {
+            state: ShipState::Alive,
+        }
+    }
+
+    fn dead(duration: Duration) -> Self {
+        Ship {
+            state: ShipState::Dead(Timer::new(duration, false)),
+        }
+    }
+
+    fn spawn(duration: Duration) -> Self {
+        Ship {
+            state: ShipState::Spawning(Timer::new(duration, false)),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum ShipState {
+    Alive,
+    Dead(Timer),
+    Spawning(Timer),
+}
+
+impl Default for ShipState {
+    fn default() -> Self {
+        ShipState::Alive
+    }
+}
+
+#[derive(Debug, Component)]
+struct Invincibility;
 
 #[derive(Debug, Component, Default)]
 struct Bullet;
@@ -232,37 +275,7 @@ fn hit_event<A, B>(e1: Entity, e2: Entity) -> HitEvent<A, B> {
 
 fn setup_system(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
-
-    commands
-        .spawn_bundle(GeometryBuilder::build_as(
-            &{
-                let mut path_builder = PathBuilder::new();
-                path_builder.move_to(Vec2::ZERO);
-                path_builder.line_to(Vec2::new(-8.0, -8.0));
-                path_builder.line_to(Vec2::new(0.0, 12.0));
-                path_builder.line_to(Vec2::new(8.0, -8.0));
-                path_builder.line_to(Vec2::ZERO);
-                let mut line = path_builder.build();
-                line.0 = line.0.transformed(&Rotation::new(Angle::degrees(-90.0)));
-                line
-            },
-            DrawMode::Stroke(StrokeMode::new(Color::BLACK, 1.0)),
-            Transform::default(),
-        ))
-        .insert(Spatial {
-            position: Vec2::ZERO,
-            rotation: 0.0,
-            radius: 12.0,
-        })
-        .insert(Ship)
-        .insert(Velocity::default())
-        .insert(SpeedLimit(350.0))
-        .insert(Damping(0.998))
-        .insert(ThrustEngine::new(1.5))
-        .insert(AngularVelocity::default())
-        .insert(SteeringControl(Angle::degrees(180.0)))
-        .insert(Weapon::new(Duration::from_millis(100)))
-        .insert(BoundaryWrap);
+    commands.spawn().insert(Ship::spawn(Duration::from_secs(0)));
 }
 
 fn movement_system(mut query: Query<(&mut Spatial, Option<&Velocity>, Option<&AngularVelocity>)>) {
@@ -339,27 +352,101 @@ fn weapon_system(
 
 fn collision_system(
     mut asteroid_hits: EventWriter<HitEvent<Asteroid, Bullet>>,
-    mut commands: Commands,
-    ships: Query<(Entity, &Spatial), With<Ship>>,
-    asteroids: Query<(Entity, &Spatial), With<Asteroid>>,
-    bullets: Query<(Entity, &Spatial), With<Bullet>>,
+    mut ship_hits: EventWriter<HitEvent<Asteroid, Ship>>,
+    ships: Query<(Entity, &Spatial), (With<Ship>, Without<Invincibility>)>,
+    asteroids: Query<(Entity, &Spatial), (With<Asteroid>, Without<Invincibility>)>,
+    bullets: Query<(Entity, &Spatial), (With<Bullet>, Without<Invincibility>)>,
 ) {
     for (bullet_entity, bullet) in bullets.iter() {
         for (asteroid_entity, asteroid) in asteroids.iter() {
             if bullet.intersects(asteroid) {
-                asteroid_hits.send(hit_event::<Asteroid, Bullet>(
-                    asteroid_entity,
-                    bullet_entity,
-                ))
+                asteroid_hits.send(hit_event(asteroid_entity, bullet_entity))
             }
         }
     }
 
-    for (_ship_entity, ship) in ships.iter() {
+    for (ship_entity, ship) in ships.iter() {
         for (asteroid_entity, asteroid) in asteroids.iter() {
             if ship.intersects(asteroid) {
-                println!("Asteroid hit ship!");
-                commands.entity(asteroid_entity).despawn();
+                ship_hits.send(hit_event(asteroid_entity, ship_entity));
+            }
+        }
+    }
+}
+
+fn ship_state_system(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut ships: Query<(Entity, &mut Ship)>,
+) {
+    for (entity, mut ship) in ships.iter_mut() {
+        match ship.state {
+            ShipState::Alive => {}
+
+            ShipState::Dead(ref mut timer) => {
+                if timer.elapsed().is_zero() {
+                    commands
+                        .entity(entity)
+                        .remove_bundle::<ShapeBundle>()
+                        .remove::<SteeringControl>()
+                        .remove::<Weapon>()
+                        .remove::<ThrustEngine>()
+                        .insert(Invincibility);
+                }
+
+                timer.tick(time.delta());
+
+                if timer.finished() {
+                    *ship = Ship::spawn(Duration::from_secs(2));
+                }
+            }
+
+            ShipState::Spawning(ref mut timer) => {
+                if timer.elapsed().is_zero() {
+                    commands
+                        .entity(entity)
+                        .insert_bundle(GeometryBuilder::build_as(
+                            &{
+                                let mut path_builder = PathBuilder::new();
+                                path_builder.move_to(Vec2::ZERO);
+                                path_builder.line_to(Vec2::new(-8.0, -8.0));
+                                path_builder.line_to(Vec2::new(0.0, 12.0));
+                                path_builder.line_to(Vec2::new(8.0, -8.0));
+                                path_builder.line_to(Vec2::ZERO);
+                                let mut line = path_builder.build();
+                                line.0 = line.0.transformed(&Rotation::new(Angle::degrees(-90.0)));
+                                line
+                            },
+                            DrawMode::Stroke(StrokeMode::new(Color::BLACK, 1.0)),
+                            Transform::default(),
+                        ))
+                        .insert(Spatial {
+                            position: Vec2::ZERO,
+                            rotation: 0.0,
+                            radius: 12.0,
+                        })
+                        .insert(Velocity::default())
+                        .insert(SpeedLimit(350.0))
+                        .insert(Damping(0.998))
+                        .insert(ThrustEngine::new(1.5))
+                        .insert(AngularVelocity::default())
+                        .insert(SteeringControl(Angle::degrees(180.0)))
+                        .insert(BoundaryWrap)
+                        .insert(Invincibility)
+                        .insert(Flick::new(Duration::from_millis(80)));
+                }
+
+                timer.tick(time.delta());
+
+                if timer.finished() {
+                    *ship = Ship::alive();
+
+                    commands
+                        .entity(entity)
+                        .insert(Weapon::new(Duration::from_millis(100)))
+                        .remove::<Invincibility>()
+                        .remove::<Flick>();
+                }
             }
         }
     }
@@ -479,6 +566,14 @@ fn flick_system(time: Res<Time>, mut query: Query<(&mut Flick, &mut Visibility)>
     }
 }
 
+fn flick_removed_system(removed: RemovedComponents<Flick>, mut query: Query<&mut Visibility>) {
+    for entity in removed.iter() {
+        if let Ok(mut visibility) = query.get_mut(entity) {
+            visibility.is_visible = true;
+        }
+    }
+}
+
 fn boundary_wrap_system(
     window: Res<WindowDescriptor>,
     mut query: Query<&mut Spatial, With<BoundaryWrap>>,
@@ -558,6 +653,44 @@ fn drawing_system(mut query: Query<(&mut Transform, &Spatial)>) {
         transform.translation.x = spatial.position.x;
         transform.translation.y = spatial.position.y;
         transform.rotation = Quat::from_rotation_z(spatial.rotation);
+    }
+}
+
+fn ship_hit_system(
+    mut rng: Local<Random>,
+    mut ship_hits: EventReader<HitEvent<Asteroid, Ship>>,
+    mut commands: Commands,
+    query: Query<&Spatial, With<Ship>>,
+) {
+    for hit in ship_hits.iter() {
+        let ship = hit.entities.1;
+
+        if let Ok(spatial) = query.get(ship) {
+            for n in 0..12 * 6 {
+                let angle = 2.0 * PI / 12.0 * (n % 12) as f32 + rng.gen_range(0.0..2.0 * PI / 12.0);
+                let direction = Vec2::new(angle.cos(), angle.sin());
+                let position = direction * rng.gen_range(1.0..20.0) + spatial.position;
+
+                commands
+                    .entity(ship)
+                    .insert(Ship::dead(Duration::from_secs(2)));
+
+                commands
+                    .spawn_bundle(ExplosionBundle::default())
+                    .insert(Spatial {
+                        position,
+                        radius: 1.0,
+                        ..spatial.clone()
+                    })
+                    .insert(Velocity(
+                        Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(150.0..250.0),
+                    ))
+                    .insert(Expiration::new(Duration::from_millis(
+                        rng.gen_range(1000..1500),
+                    )))
+                    .insert(Flick::new(Duration::from_millis(rng.gen_range(20..30))));
+            }
+        }
     }
 }
 
