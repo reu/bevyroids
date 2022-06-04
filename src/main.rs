@@ -86,7 +86,7 @@ struct ThrustEngine {
 }
 
 impl ThrustEngine {
-    pub fn new(force: f32) -> Self {
+    fn new(force: f32) -> Self {
         Self {
             force,
             ..Default::default()
@@ -104,7 +104,7 @@ struct Weapon {
 }
 
 impl Weapon {
-    pub fn new(rate_of_fire: Duration) -> Self {
+    fn new(rate_of_fire: Duration) -> Self {
         Self {
             cooldown: Timer::new(rate_of_fire, true),
             ..Default::default()
@@ -113,7 +113,7 @@ impl Weapon {
 }
 
 #[derive(Debug, Component, Default)]
-pub struct Ship {
+struct Ship {
     state: ShipState,
 }
 
@@ -151,13 +151,13 @@ impl Default for ShipState {
 }
 
 #[derive(Debug, Component, Default)]
-pub struct Bullet;
+struct Bullet;
 
 #[derive(Debug, Component, Default)]
 struct Explosion;
 
 #[derive(Debug, Component, Default)]
-pub struct Asteroid;
+struct Asteroid;
 
 #[derive(Debug, Deref)]
 struct AsteroidSpawnEvent(Spatial);
