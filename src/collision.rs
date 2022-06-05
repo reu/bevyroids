@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 
-use crate::spatial::Spatial;
+use crate::boundary::Bounding;
 
 pub struct CollisionPlugin<Hittable, Hurtable> {
     _phantom: PhantomData<(Hittable, Hurtable)>,
@@ -47,13 +47,13 @@ pub struct Collidable;
 
 fn collision_system<A: Component, B: Component>(
     mut hits: EventWriter<HitEvent<A, B>>,
-    hittables: Query<(Entity, &Transform, &Spatial), (With<Collidable>, With<A>)>,
-    hurtables: Query<(Entity, &Transform, &Spatial), (With<Collidable>, With<B>)>,
+    hittables: Query<(Entity, &Transform, &Bounding), (With<Collidable>, With<A>)>,
+    hurtables: Query<(Entity, &Transform, &Bounding), (With<Collidable>, With<B>)>,
 ) {
-    for (hittable_entity, hit_transform, hit_spatial) in hittables.iter() {
-        for (hurtable_entity, hurt_transform, hurt_spatial) in hurtables.iter() {
+    for (hittable_entity, hit_transform, hit_bounds) in hittables.iter() {
+        for (hurtable_entity, hurt_transform, hurt_bounds) in hurtables.iter() {
             let distance = (hit_transform.translation - hurt_transform.translation).length();
-            if distance < hit_spatial.radius + hurt_spatial.radius {
+            if distance < **hit_bounds + **hurt_bounds {
                 hits.send(HitEvent {
                     entities: (hittable_entity, hurtable_entity),
                     _phantom: PhantomData,

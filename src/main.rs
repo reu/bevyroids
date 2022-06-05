@@ -11,14 +11,13 @@ use bevy_prototype_lyon::{
     },
     shapes::Polygon,
 };
-use boundary::{BoundaryPlugin, BoundaryRemoval, BoundaryWrap};
+use boundary::{BoundaryPlugin, BoundaryRemoval, BoundaryWrap, Bounding};
 use collision::{Collidable, CollisionPlugin, CollisionSystemLabel, HitEvent};
 use expiration::{Expiration, ExpirationPlugin};
 use flickering::{Flick, FlickPlugin};
 use physics::{AngularVelocity, Damping, PhysicsPlugin, PhysicsSystemLabel, SpeedLimit, Velocity};
 use rand::Rng;
 use random::{Random, RandomPlugin};
-use spatial::{Spatial, SpatialPlugin};
 
 mod boundary;
 mod collision;
@@ -26,7 +25,6 @@ mod expiration;
 mod flickering;
 mod physics;
 mod random;
-mod spatial;
 
 fn main() {
     App::new()
@@ -45,7 +43,6 @@ fn main() {
         })
         .add_event::<AsteroidSpawnEvent>()
         .add_plugin(RandomPlugin)
-        .add_plugin(SpatialPlugin)
         .add_plugin(PhysicsPlugin::with_fixed_time_step(1.0 / 120.0))
         .add_plugin(CollisionPlugin::<Bullet, Asteroid>::new())
         .add_plugin(CollisionPlugin::<Asteroid, Ship>::new())
@@ -160,14 +157,13 @@ struct Explosion;
 struct Asteroid;
 
 #[derive(Debug)]
-struct AsteroidSpawnEvent(Vec2, Spatial);
+struct AsteroidSpawnEvent(Vec2, Bounding);
 
 #[derive(Bundle)]
 struct ExplosionBundle {
     #[bundle]
     shape_bundle: ShapeBundle,
     explosion: Explosion,
-    spatial: Spatial,
     velocity: Velocity,
     damping: Damping,
     expiration: Expiration,
@@ -185,7 +181,6 @@ impl Default for ExplosionBundle {
                 Transform::default(),
             ),
             explosion: Explosion::default(),
-            spatial: Spatial::default(),
             velocity: Velocity::default(),
             damping: Damping::from(0.97),
             expiration: Expiration::new(Duration::from_secs(1)),
@@ -211,9 +206,9 @@ fn thrust_system(mut query: Query<(&mut Velocity, &ThrustEngine, &Transform)>) {
 fn weapon_system(
     time: Res<Time>,
     mut commands: Commands,
-    mut query: Query<(&Spatial, &Transform, &mut Weapon)>,
+    mut query: Query<(&Bounding, &Transform, &mut Weapon)>,
 ) {
-    for (spatial, transform, mut weapon) in query.iter_mut() {
+    for (bounds, transform, mut weapon) in query.iter_mut() {
         weapon.cooldown.tick(time.delta());
 
         if weapon.cooldown.finished() && weapon.triggered {
@@ -221,7 +216,7 @@ fn weapon_system(
 
             let bullet_dir = transform.rotation * Vec3::X;
             let bullet_vel = bullet_dir * 1000.0;
-            let bullet_pos = transform.translation + (bullet_dir * spatial.radius);
+            let bullet_pos = transform.translation + (bullet_dir * **bounds);
 
             commands
                 .spawn_bundle(GeometryBuilder::build_as(
@@ -238,7 +233,7 @@ fn weapon_system(
                 ))
                 .insert(Bullet)
                 .insert(Collidable)
-                .insert(Spatial { radius: 2.0 })
+                .insert(Bounding::from_radius(2.0))
                 .insert(Velocity::from(Vec2::new(bullet_vel.x, bullet_vel.y)))
                 .insert(BoundaryRemoval);
         }
@@ -291,7 +286,7 @@ fn ship_state_system(
                             DrawMode::Stroke(StrokeMode::new(Color::BLACK, 1.0)),
                             Transform::default(),
                         ))
-                        .insert(Spatial { radius: 12.0 })
+                        .insert(Bounding::from_radius(12.0))
                         .insert(Velocity::default())
                         .insert(SpeedLimit::from(350.0))
                         .insert(Damping::from(0.998))
@@ -343,7 +338,7 @@ fn asteroid_spawn_system(
             Vec2::new(if x > 0.0 { w + c } else { -w - c }, y)
         };
 
-        asteroids.send(AsteroidSpawnEvent(position, Spatial { radius }));
+        asteroids.send(AsteroidSpawnEvent(position, Bounding::from_radius(radius)));
     }
 }
 
@@ -357,11 +352,11 @@ fn asteroid_generation_system(
     let w = window.width / 2.0;
     let h = window.height / 2.0;
 
-    for AsteroidSpawnEvent(position, asteroid) in asteroids.iter() {
+    for AsteroidSpawnEvent(position, bounds) in asteroids.iter() {
         let velocity = Vec2::new(rng.gen_range(-w..w), rng.gen_range(-h..h));
-        let scale = if asteroid_sizes.big.contains(&asteroid.radius) {
+        let scale = if asteroid_sizes.big.contains(bounds) {
             rng.gen_range(30.0..60.0)
-        } else if asteroid_sizes.medium.contains(&asteroid.radius) {
+        } else if asteroid_sizes.medium.contains(bounds) {
             rng.gen_range(60.0..80.0)
         } else {
             rng.gen_range(80.0..100.0)
@@ -375,7 +370,7 @@ fn asteroid_generation_system(
             let internal = (n - 2.0) * PI / n;
             let offset = -internal / 2.0;
             let step = 2.0 * PI / n;
-            let r = asteroid.radius;
+            let r = **bounds;
             for i in 0..sides {
                 let cur_angle = (i as f32).mul_add(step, offset);
                 let x = r * rng.gen_range(0.5..1.2) * cur_angle.cos();
@@ -396,9 +391,7 @@ fn asteroid_generation_system(
             ))
             .insert(Asteroid)
             .insert(Collidable)
-            .insert(Spatial {
-                radius: asteroid.radius,
-            })
+            .insert(*bounds)
             .insert(Velocity::from(velocity))
             .insert(AngularVelocity::from(rng.gen_range(-3.0..3.0)))
             .insert(BoundaryRemoval);
@@ -462,7 +455,6 @@ fn ship_hit_system(
                 commands
                     .spawn_bundle(ExplosionBundle::default())
                     .insert(Transform::default().with_translation(position))
-                    .insert(Spatial { radius: 1.0 })
                     .insert(Velocity::from(
                         Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(150.0..250.0),
                     ))
@@ -481,7 +473,7 @@ fn asteroid_hit_system(
     mut asteroid_hits: EventReader<HitEvent<Bullet, Asteroid>>,
     mut asteroid_spawn: EventWriter<AsteroidSpawnEvent>,
     mut commands: Commands,
-    query: Query<(&Transform, &Spatial), With<Asteroid>>,
+    query: Query<(&Transform, &Bounding), With<Asteroid>>,
 ) {
     let mut removed = HashSet::with_capacity(asteroid_hits.len());
 
@@ -493,24 +485,18 @@ fn asteroid_hit_system(
             continue;
         }
 
-        if let Ok((transform, spatial)) = query.get(asteroid) {
+        if let Ok((transform, radius)) = query.get(asteroid) {
             let position = Vec2::new(transform.translation.x, transform.translation.y);
 
-            if asteroid_sizes.big.contains(&spatial.radius) {
-                let spatial = Spatial {
-                    radius: rng.gen_range(asteroid_sizes.medium.clone()),
-                };
-
-                asteroid_spawn.send(AsteroidSpawnEvent(position, spatial.clone()));
-                asteroid_spawn.send(AsteroidSpawnEvent(position, spatial.clone()));
-                asteroid_spawn.send(AsteroidSpawnEvent(position, spatial.clone()));
-            } else if asteroid_sizes.medium.contains(&spatial.radius) {
-                let spatial = Spatial {
-                    radius: rng.gen_range(asteroid_sizes.small.clone()),
-                };
-
-                asteroid_spawn.send(AsteroidSpawnEvent(position, spatial.clone()));
-                asteroid_spawn.send(AsteroidSpawnEvent(position, spatial.clone()));
+            if asteroid_sizes.big.contains(radius) {
+                let bounds = Bounding::from_radius(rng.gen_range(asteroid_sizes.medium.clone()));
+                asteroid_spawn.send(AsteroidSpawnEvent(position, bounds));
+                asteroid_spawn.send(AsteroidSpawnEvent(position, bounds));
+                asteroid_spawn.send(AsteroidSpawnEvent(position, bounds));
+            } else if asteroid_sizes.medium.contains(radius) {
+                let bounds = Bounding::from_radius(rng.gen_range(asteroid_sizes.small.clone()));
+                asteroid_spawn.send(AsteroidSpawnEvent(position, bounds));
+                asteroid_spawn.send(AsteroidSpawnEvent(position, bounds));
             }
 
             for n in 0..12 {
@@ -521,7 +507,6 @@ fn asteroid_hit_system(
                 commands
                     .spawn_bundle(ExplosionBundle::default())
                     .insert(Transform::default().with_translation(position))
-                    .insert(Spatial { radius: 1.0 })
                     .insert(Velocity::from(
                         Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(50.0..100.0),
                     ))
