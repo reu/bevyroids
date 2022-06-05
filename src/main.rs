@@ -33,6 +33,7 @@ fn main() {
             present_mode: PresentMode::Fifo,
             ..default()
         })
+        .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins)
         .add_plugin(ShapePlugin)
@@ -231,7 +232,7 @@ impl Default for ExplosionBundle {
                     radius: 1.0,
                     center: Vec2::ZERO,
                 },
-                DrawMode::Fill(FillMode::color(Color::BLACK)),
+                DrawMode::Fill(FillMode::color(Color::WHITE)),
                 Transform::default(),
             ),
             explosion: Explosion::default(),
@@ -284,7 +285,7 @@ fn weapon_system(
                         radius: 2.0,
                         center: Vec2::ZERO,
                     },
-                    DrawMode::Fill(FillMode::color(Color::BLACK)),
+                    DrawMode::Fill(FillMode::color(Color::WHITE)),
                     Transform::default().with_translation(Vec3::new(
                         bullet_pos.x,
                         bullet_pos.y,
@@ -343,7 +344,7 @@ fn ship_state_system(
                                 line.0 = line.0.transformed(&Rotation::new(Angle::degrees(-90.0)));
                                 line
                             },
-                            DrawMode::Stroke(StrokeMode::new(Color::BLACK, 1.0)),
+                            DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.0)),
                             Transform::default(),
                         ))
                         .insert(Bounding::from_radius(12.0))
@@ -450,7 +451,7 @@ fn ufo_spawn_system(
                 extents: Vec2::new(c, c / 2.0),
                 ..Default::default()
             },
-            DrawMode::Stroke(StrokeMode::new(Color::BLACK, 1.0)),
+            DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.0)),
             Transform::default().with_translation(position),
         ))
         .insert_bundle(GeometryBuilder::build_as(
@@ -480,7 +481,7 @@ fn ufo_spawn_system(
 
                 path_builder.build()
             },
-            DrawMode::Stroke(StrokeMode::new(Color::BLACK, 1.0)),
+            DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.0)),
             Transform::default().with_translation(position),
         ))
         .insert(Ufo::alive(Duration::from_secs(rng.gen_range(1..5))))
@@ -576,7 +577,7 @@ fn asteroid_generation_system(
         commands
             .spawn_bundle(GeometryBuilder::build_as(
                 &shape,
-                DrawMode::Stroke(StrokeMode::new(Color::BLACK, 1.0)),
+                DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.0)),
                 Transform::default().with_translation(Vec3::new(position.x, position.y, 0.0)),
             ))
             .insert(Asteroid)
