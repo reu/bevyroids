@@ -1,0 +1,40 @@
+<html>
+  <head>
+    <meta charset="UTF-8" />
+
+    <title>Bevyroids</title>
+
+    <style>
+      body {
+        background-color: black;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      canvas {
+        border: 1px solid: white;
+      }
+    </style>
+  </head>
+
+  <body></body>
+
+  <script type="module">
+  	import bevyroids from "./bevyroids.js";
+    bevyroids();
+  </script>
+
+  <script>
+    const canvasObserver = new MutationObserver(mutations => {
+      for (const mutation of mutations) {
+        if (mutation.type === "childList") {
+          document.querySelector("canvas")?.focus();
+        }
+      }
+    });
+
+    canvasObserver.observe(document.body, { childList: true, subtree: true });
+  </script>
+</html>
