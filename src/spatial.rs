@@ -11,7 +11,6 @@ impl Plugin for SpatialPlugin {
 #[derive(Debug, Component, Default, Clone)]
 pub struct Spatial {
     pub position: Vec2,
-    pub rotation: f32,
     pub radius: f32,
 }
 
@@ -29,6 +28,5 @@ fn spatial_system(mut query: Query<(&mut Transform, &Spatial)>) {
     for (mut transform, spatial) in query.iter_mut() {
         transform.translation.x = spatial.position.x;
         transform.translation.y = spatial.position.y;
-        transform.rotation = Quat::from_rotation_z(spatial.rotation);
     }
 }

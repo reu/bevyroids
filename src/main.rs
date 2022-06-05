@@ -198,11 +198,12 @@ fn setup_system(mut commands: Commands) {
     commands.spawn().insert(Ship::spawn(Duration::from_secs(0)));
 }
 
-fn thrust_system(mut query: Query<(&mut Velocity, &ThrustEngine, &Spatial)>) {
-    for (mut velocity, thrust, spatial) in query.iter_mut() {
+fn thrust_system(mut query: Query<(&mut Velocity, &ThrustEngine, &Transform)>) {
+    for (mut velocity, thrust, transform) in query.iter_mut() {
         if thrust.on {
-            velocity.x += spatial.rotation.cos() * thrust.force;
-            velocity.y += spatial.rotation.sin() * thrust.force;
+            let dir = transform.rotation * Vec3::X;
+            velocity.x += dir.x * thrust.force;
+            velocity.y += dir.y * thrust.force;
         }
     }
 }
@@ -210,15 +211,16 @@ fn thrust_system(mut query: Query<(&mut Velocity, &ThrustEngine, &Spatial)>) {
 fn weapon_system(
     time: Res<Time>,
     mut commands: Commands,
-    mut query: Query<(&Spatial, &mut Weapon)>,
+    mut query: Query<(&Spatial, &Transform, &mut Weapon)>,
 ) {
-    for (spatial, mut weapon) in query.iter_mut() {
+    for (spatial, transform, mut weapon) in query.iter_mut() {
         weapon.cooldown.tick(time.delta());
 
         if weapon.cooldown.finished() && weapon.triggered {
             weapon.triggered = false;
 
-            let bullet_dir = Vec2::new(spatial.rotation.cos(), spatial.rotation.sin());
+            let bullet_dir = transform.rotation * Vec3::X;
+            let bullet_dir = Vec2::new(bullet_dir.x, bullet_dir.y);
             let bullet_vel = bullet_dir * 1000.0;
             let bullet_pos = spatial.position + (bullet_dir * spatial.radius);
 
@@ -239,7 +241,6 @@ fn weapon_system(
                 .insert(Collidable)
                 .insert(Spatial {
                     position: bullet_pos,
-                    rotation: 0.0,
                     radius: 2.0,
                 })
                 .insert(Velocity::from(bullet_vel))
@@ -296,7 +297,6 @@ fn ship_state_system(
                         ))
                         .insert(Spatial {
                             position: Vec2::ZERO,
-                            rotation: 0.0,
                             radius: 12.0,
                         })
                         .insert(Velocity::default())
@@ -350,11 +350,7 @@ fn asteroid_spawn_system(
             Vec2::new(if x > 0.0 { w + c } else { -w - c }, y)
         };
 
-        asteroids.send(AsteroidSpawnEvent(Spatial {
-            position,
-            radius,
-            ..Default::default()
-        }));
+        asteroids.send(AsteroidSpawnEvent(Spatial { position, radius }));
     }
 }
 
@@ -475,7 +471,6 @@ fn ship_hit_system(
                     .insert(Spatial {
                         position,
                         radius: 1.0,
-                        ..spatial.clone()
                     })
                     .insert(Velocity::from(
                         Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(150.0..250.0),
@@ -536,7 +531,6 @@ fn asteroid_hit_system(
                     .insert(Spatial {
                         position,
                         radius: 1.0,
-                        ..spatial.clone()
                     })
                     .insert(Velocity::from(
                         Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(50.0..100.0),
