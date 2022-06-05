@@ -1,8 +1,6 @@
 use bevy::{core::FixedTimestep, prelude::*};
 use derive_more::From;
 
-use crate::spatial::Spatial;
-
 pub struct PhysicsPlugin {
     time_step: f32,
 }
@@ -52,16 +50,12 @@ pub struct Damping(f32);
 
 fn movement_system(
     time_step: Res<TimeStep>,
-    mut query: Query<(
-        &mut Spatial,
-        &mut Transform,
-        Option<&Velocity>,
-        Option<&AngularVelocity>,
-    )>,
+    mut query: Query<(&mut Transform, Option<&Velocity>, Option<&AngularVelocity>)>,
 ) {
-    for (mut spatial, mut transform, velocity, angular_velocity) in query.iter_mut() {
-        if let Some(velocity) = velocity {
-            spatial.position += velocity.0 * time_step.0;
+    for (mut transform, velocity, angular_velocity) in query.iter_mut() {
+        if let Some(Velocity(vel)) = velocity {
+            transform.translation.x += vel.x * time_step.0;
+            transform.translation.y += vel.y * time_step.0;
         }
         if let Some(AngularVelocity(vel)) = angular_velocity {
             transform.rotate(Quat::from_rotation_z(vel * time_step.0));

@@ -47,12 +47,13 @@ pub struct Collidable;
 
 fn collision_system<A: Component, B: Component>(
     mut hits: EventWriter<HitEvent<A, B>>,
-    hittables: Query<(Entity, &Spatial), (With<Collidable>, With<A>)>,
-    hurtables: Query<(Entity, &Spatial), (With<Collidable>, With<B>)>,
+    hittables: Query<(Entity, &Transform, &Spatial), (With<Collidable>, With<A>)>,
+    hurtables: Query<(Entity, &Transform, &Spatial), (With<Collidable>, With<B>)>,
 ) {
-    for (hittable_entity, hittable) in hittables.iter() {
-        for (hurtable_entity, hurtable) in hurtables.iter() {
-            if hittable.intersects(hurtable) {
+    for (hittable_entity, hit_transform, hit_spatial) in hittables.iter() {
+        for (hurtable_entity, hurt_transform, hurt_spatial) in hurtables.iter() {
+            let distance = (hit_transform.translation - hurt_transform.translation).length();
+            if distance < hit_spatial.radius + hurt_spatial.radius {
                 hits.send(HitEvent {
                     entities: (hittable_entity, hurtable_entity),
                     _phantom: PhantomData,
