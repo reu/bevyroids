@@ -693,10 +693,10 @@ fn asteroid_hit_system(
                 let bounds = Bounding::from_radius(rng.gen_range(asteroid_sizes.medium.clone()));
                 asteroid_spawn.send(AsteroidSpawnEvent(position, bounds));
                 asteroid_spawn.send(AsteroidSpawnEvent(position, bounds));
-                asteroid_spawn.send(AsteroidSpawnEvent(position, bounds));
                 5
             } else if asteroid_sizes.medium.contains(radius) {
                 let bounds = Bounding::from_radius(rng.gen_range(asteroid_sizes.small.clone()));
+                asteroid_spawn.send(AsteroidSpawnEvent(position, bounds));
                 asteroid_spawn.send(AsteroidSpawnEvent(position, bounds));
                 asteroid_spawn.send(AsteroidSpawnEvent(position, bounds));
                 3
