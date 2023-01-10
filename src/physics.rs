@@ -1,4 +1,4 @@
-use bevy::{core::FixedTimestep, prelude::*};
+use bevy::{time::FixedTimestep, prelude::*};
 use derive_more::From;
 
 pub struct PhysicsPlugin {
@@ -19,7 +19,7 @@ impl Default for PhysicsPlugin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemLabel)]
 pub struct PhysicsSystemLabel;
-
+#[derive(Resource)]
 pub struct TimeStep(pub f32);
 
 impl Plugin for PhysicsPlugin {
@@ -36,10 +36,10 @@ impl Plugin for PhysicsPlugin {
     }
 }
 
-#[derive(Debug, Component, Default, Deref, DerefMut, From)]
+#[derive(Debug, Component, Default, Deref, DerefMut, From,Resource)]
 pub struct Velocity(Vec2);
 
-#[derive(Debug, Component, Default, Deref, DerefMut, From)]
+#[derive(Debug, Component, Default, Deref, DerefMut, From,Resource)]
 pub struct AngularVelocity(f32);
 
 #[derive(Debug, Component, Default, Deref, DerefMut, From)]

@@ -2,7 +2,7 @@
 
 use std::{f32::consts::PI, ops::Range, time::Duration};
 
-use bevy::{core::FixedTimestep, prelude::*, utils::HashSet, window::PresentMode};
+use bevy::{time::FixedTimestep, prelude::*, utils::HashSet};
 use bevy_prototype_lyon::{
     entity::ShapeBundle,
     prelude::{
@@ -28,14 +28,18 @@ mod random;
 
 fn main() {
     App::new()
-        .insert_resource(WindowDescriptor {
+    .add_plugins(DefaultPlugins.set(WindowPlugin {
+        window: WindowDescriptor {
             title: "Bevyroids".to_string(),
-            present_mode: PresentMode::Fifo,
-            ..default()
-        })
+            width: 800.0,
+            height: 600.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    }))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(Msaa { samples: 4 })
-        .add_plugins(DefaultPlugins)
+        //.add_plugins(DefaultPlugins)
         .add_plugin(ShapePlugin)
         .insert_resource(AsteroidSizes {
             big: 50.0..60.0,
@@ -77,12 +81,13 @@ fn main() {
         .run();
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone,Resource)]
 struct AsteroidSizes {
     big: Range<f32>,
     medium: Range<f32>,
     small: Range<f32>,
 }
+
 
 #[derive(Debug, Component, Default)]
 struct ThrustEngine {
@@ -124,7 +129,7 @@ impl Default for Weapon {
 impl Weapon {
     fn new(rate_of_fire: Duration) -> Self {
         Self {
-            cooldown: Timer::new(rate_of_fire, true),
+            cooldown: Timer::new(rate_of_fire, TimerMode::Repeating),
             ..Default::default()
         }
     }
@@ -147,13 +152,13 @@ impl Ship {
 
     fn dead(duration: Duration) -> Self {
         Ship {
-            state: ShipState::Dead(Timer::new(duration, false)),
+            state: ShipState::Dead(Timer::new(duration, TimerMode::Once)),
         }
     }
 
     fn spawn(duration: Duration) -> Self {
         Ship {
-            state: ShipState::Spawning(Timer::new(duration, false)),
+            state: ShipState::Spawning(Timer::new(duration, TimerMode::Once)),
         }
     }
 }
@@ -187,20 +192,20 @@ enum UfoState {
 
 impl Default for UfoState {
     fn default() -> Self {
-        UfoState::Alive(Timer::new(Duration::from_secs(5), false))
+        UfoState::Alive(Timer::new(Duration::from_secs(5), TimerMode::Once))
     }
 }
 
 impl Ufo {
     fn alive(duration: Duration) -> Self {
         Ufo {
-            state: UfoState::Alive(Timer::new(duration, false)),
+            state: UfoState::Alive(Timer::new(duration, TimerMode::Once)),
         }
     }
 
     fn changing_direction(duration: Duration) -> Self {
         Ufo {
-            state: UfoState::ChangingDirection(Timer::new(duration, false)),
+            state: UfoState::ChangingDirection(Timer::new(duration, TimerMode::Once)),
         }
     }
 }
@@ -244,8 +249,8 @@ impl Default for ExplosionBundle {
 }
 
 fn setup_system(mut commands: Commands) {
-    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
-    commands.spawn().insert(Ship::spawn(Duration::from_secs(0)));
+    commands.spawn(Camera2dBundle::default());
+    commands.spawn(Ship::spawn(Duration::from_secs(0)));
 }
 
 fn thrust_system(mut query: Query<(&mut Velocity, &ThrustEngine, &Transform)>) {
@@ -280,7 +285,7 @@ fn weapon_system(
             let bullet_pos = transform.translation + (bullet_dir * bounds);
 
             commands
-                .spawn_bundle(GeometryBuilder::build_as(
+                .spawn(GeometryBuilder::build_as(
                     &shapes::Circle {
                         radius: 2.0,
                         center: Vec2::ZERO,
@@ -314,7 +319,7 @@ fn ship_state_system(
                 if timer.elapsed().is_zero() {
                     commands
                         .entity(entity)
-                        .remove_bundle::<ShapeBundle>()
+                        .remove::<ShapeBundle>()
                         .remove::<SteeringControl>()
                         .remove::<Weapon>()
                         .remove::<ThrustEngine>()
@@ -332,7 +337,7 @@ fn ship_state_system(
                 if timer.elapsed().is_zero() {
                     commands
                         .entity(entity)
-                        .insert_bundle(GeometryBuilder::build_as(
+                        .insert(GeometryBuilder::build_as(
                             &{
                                 let mut path_builder = PathBuilder::new();
                                 path_builder.move_to(Vec2::ZERO);
@@ -429,14 +434,15 @@ fn ufo_state_system(
 }
 
 fn ufo_spawn_system(
-    window: Res<WindowDescriptor>,
+    mut windows: ResMut<Windows>,
     mut rng: Local<Random>,
     mut commands: Commands,
     ships: Query<Entity, With<Ship>>,
 ) {
+    let window = windows.get_primary_mut().unwrap();
     if rng.gen_bool(1.0 / 10.0) {
-        let h = (window.height * 0.8) / 2.0;
-        let w = window.width / 2.0;
+        let h = (window.height() * 0.8) / 2.0;
+        let w = window.width() / 2.0;
 
         let y = rng.gen_range(-h..h);
         let x = [-w, w].choose(&mut **rng).copied().unwrap();
@@ -444,9 +450,9 @@ fn ufo_spawn_system(
         let c = 30.0;
         let position = Vec3::new(if x > 0.0 { w + c } else { -w - c }, y, 0.0);
 
-        let mut ufo = commands.spawn();
+        let mut ufo = commands.spawn_empty();
 
-        ufo.insert_bundle(GeometryBuilder::build_as(
+        ufo.insert(GeometryBuilder::build_as(
             &shapes::Rectangle {
                 extents: Vec2::new(c, c / 2.0),
                 ..Default::default()
@@ -454,7 +460,7 @@ fn ufo_spawn_system(
             DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.0)),
             Transform::default().with_translation(position),
         ))
-        .insert_bundle(GeometryBuilder::build_as(
+        .insert(GeometryBuilder::build_as(
             &{
                 let h = c / 2.5;
                 let w = c;
@@ -505,14 +511,15 @@ fn ufo_spawn_system(
 }
 
 fn asteroid_spawn_system(
-    window: Res<WindowDescriptor>,
+    mut windows: ResMut<Windows>,
     asteroid_sizes: Res<AsteroidSizes>,
     mut rng: Local<Random>,
     mut asteroids: EventWriter<AsteroidSpawnEvent>,
 ) {
+    let window = windows.get_primary_mut().unwrap();
     if rng.gen_bool(1.0 / 3.0) {
-        let w = window.width / 2.0;
-        let h = window.height / 2.0;
+        let w = window.width() / 2.0;
+        let h = window.height() / 2.0;
 
         let x = rng.gen_range(-w..w);
         let y = rng.gen_range(-h..h);
@@ -534,14 +541,15 @@ fn asteroid_spawn_system(
 }
 
 fn asteroid_generation_system(
-    window: Res<WindowDescriptor>,
+    mut windows: ResMut<Windows>,
     asteroid_sizes: Res<AsteroidSizes>,
     mut rng: Local<Random>,
     mut asteroids: EventReader<AsteroidSpawnEvent>,
     mut commands: Commands,
 ) {
-    let w = window.width / 2.0;
-    let h = window.height / 2.0;
+    let window = windows.get_primary_mut().unwrap();
+    let w = window.width() / 2.0;
+    let h = window.height() / 2.0;
 
     for AsteroidSpawnEvent(position, bounds) in asteroids.iter() {
         let velocity = Vec2::new(rng.gen_range(-w..w), rng.gen_range(-h..h));
@@ -575,7 +583,7 @@ fn asteroid_generation_system(
         };
 
         commands
-            .spawn_bundle(GeometryBuilder::build_as(
+            .spawn(GeometryBuilder::build_as(
                 &shape,
                 DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.0)),
                 Transform::default().with_translation(Vec3::new(position.x, position.y, 0.0)),
@@ -655,7 +663,7 @@ fn ship_hit_system(
                     .insert(Ship::dead(Duration::from_secs(2)));
 
                 commands
-                    .spawn_bundle(ExplosionBundle::default())
+                    .spawn(ExplosionBundle::default())
                     .insert(Transform::default().with_translation(position))
                     .insert(Velocity::from(
                         Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(150.0..250.0),
@@ -711,7 +719,7 @@ fn asteroid_hit_system(
                 let position = direction * rng.gen_range(1.0..20.0) + transform.translation;
 
                 commands
-                    .spawn_bundle(ExplosionBundle::default())
+                    .spawn(ExplosionBundle::default())
                     .insert(Transform::default().with_translation(position))
                     .insert(Velocity::from(
                         Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(50.0..100.0),
@@ -757,7 +765,7 @@ fn ufo_hit_system(
                 let position = direction * rng.gen_range(1.0..20.0) + transform.translation;
 
                 commands
-                    .spawn_bundle(ExplosionBundle::default())
+                    .spawn(ExplosionBundle::default())
                     .insert(Transform::default().with_translation(position))
                     .insert(Velocity::from(
                         Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(50.0..100.0),

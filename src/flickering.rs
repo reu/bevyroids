@@ -16,7 +16,7 @@ pub struct Flick(Timer);
 
 impl Flick {
     pub fn new(frequency: Duration) -> Self {
-        Self(Timer::new(frequency, true))
+        Self(Timer::new(frequency, TimerMode::Repeating))
     }
 }
 
