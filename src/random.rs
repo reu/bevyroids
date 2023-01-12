@@ -9,7 +9,7 @@ impl Plugin for RandomPlugin {
     }
 }
 
-#[derive(Debug, Deref, DerefMut)]
+#[derive(Debug, Deref, DerefMut, Resource)]
 pub struct Random(SmallRng);
 
 impl FromWorld for Random {

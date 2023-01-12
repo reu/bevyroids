@@ -15,7 +15,7 @@ pub struct Expiration(Timer);
 
 impl Expiration {
     pub fn new(duration: Duration) -> Self {
-        Self(Timer::new(duration, false))
+        Self(Timer::new(duration, TimerMode::Once))
     }
 }
 
