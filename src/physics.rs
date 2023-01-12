@@ -19,6 +19,7 @@ impl Default for PhysicsPlugin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemLabel)]
 pub struct PhysicsSystemLabel;
+
 #[derive(Resource)]
 pub struct TimeStep(pub f32);
 
