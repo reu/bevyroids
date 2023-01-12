@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use rand::{prelude::SmallRng, SeedableRng};
+
 pub struct RandomPlugin;
 
 impl Plugin for RandomPlugin {
