@@ -29,13 +29,10 @@ pub struct BoundaryWrap;
 pub struct BoundaryRemoval;
 
 fn boundary_wrap_system(
-    mut windows: ResMut<Windows>,
+    windows: ResMut<Windows>,
     mut query: Query<(&mut Transform, &Bounding), With<BoundaryWrap>>,
 ) {
-    let temp_win = windows.get_primary_mut();
-
-    if !temp_win.is_none() {
-        let window = windows.get_primary_mut().unwrap();
+    if let Some(window) = windows.get_primary() {
         for (mut transform, radius) in query.iter_mut() {
             let x = transform.translation.x;
             let y = transform.translation.y;
@@ -59,13 +56,10 @@ fn boundary_wrap_system(
 
 fn boundary_remove_system(
     mut commands: Commands,
-    mut windows: ResMut<Windows>,
+    windows: ResMut<Windows>,
     query: Query<(Entity, &Transform, &Bounding), With<BoundaryRemoval>>,
 ) {
-    let temp_win = windows.get_primary_mut();
-
-    if !temp_win.is_none() {
-        let window = windows.get_primary_mut().unwrap();
+    if let Some(window) = windows.get_primary() {
         for (entity, transform, radius) in query.iter() {
             let half_width = window.width() / 2.0;
             let half_height = window.height() / 2.0;
