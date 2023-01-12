@@ -1,4 +1,4 @@
-use bevy::{time::FixedTimestep, prelude::*};
+use bevy::{prelude::*, time::FixedTimestep};
 use derive_more::From;
 
 pub struct PhysicsPlugin {
@@ -36,10 +36,10 @@ impl Plugin for PhysicsPlugin {
     }
 }
 
-#[derive(Debug, Component, Default, Deref, DerefMut, From,Resource)]
+#[derive(Debug, Component, Default, Deref, DerefMut, From, Resource)]
 pub struct Velocity(Vec2);
 
-#[derive(Debug, Component, Default, Deref, DerefMut, From,Resource)]
+#[derive(Debug, Component, Default, Deref, DerefMut, From, Resource)]
 pub struct AngularVelocity(f32);
 
 #[derive(Debug, Component, Default, Deref, DerefMut, From)]

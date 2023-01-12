@@ -32,8 +32,6 @@ fn boundary_wrap_system(
     mut windows: ResMut<Windows>,
     mut query: Query<(&mut Transform, &Bounding), With<BoundaryWrap>>,
 ) {
-
-
     let temp_win = windows.get_primary_mut();
 
     if !temp_win.is_none() {
@@ -41,14 +39,14 @@ fn boundary_wrap_system(
         for (mut transform, radius) in query.iter_mut() {
             let x = transform.translation.x;
             let y = transform.translation.y;
-    
+
             let half_width = window.width() / 2.0;
             if x + radius.0 * 2.0 < -half_width {
                 transform.translation.x = half_width + radius.0 * 2.0;
             } else if x - radius.0 * 2.0 > half_width {
                 transform.translation.x = -half_width - radius.0 * 2.0;
             }
-    
+
             let half_height = window.height() / 2.0;
             if y + radius.0 * 2.0 < -half_height {
                 transform.translation.y = half_height + radius.0 * 2.0;
@@ -80,7 +78,6 @@ fn boundary_remove_system(
             {
                 commands.entity(entity).despawn();
             }
-        }    
+        }
     }
-    
 }

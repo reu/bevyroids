@@ -2,7 +2,7 @@
 
 use std::{f32::consts::PI, ops::Range, time::Duration};
 
-use bevy::{time::FixedTimestep, prelude::*, utils::HashSet};
+use bevy::{prelude::*, time::FixedTimestep, utils::HashSet};
 use bevy_prototype_lyon::{
     entity::ShapeBundle,
     prelude::{
@@ -28,15 +28,15 @@ mod random;
 
 fn main() {
     App::new()
-    .add_plugins(DefaultPlugins.set(WindowPlugin {
-        window: WindowDescriptor {
-            title: "Bevyroids".to_string(),
-            width: 800.0,
-            height: 600.0,
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            window: WindowDescriptor {
+                title: "Bevyroids".to_string(),
+                width: 800.0,
+                height: 600.0,
+                ..Default::default()
+            },
             ..Default::default()
-        },
-        ..Default::default()
-    }))
+        }))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(Msaa { samples: 4 })
         //.add_plugins(DefaultPlugins)
@@ -81,13 +81,12 @@ fn main() {
         .run();
 }
 
-#[derive(Debug, Clone,Resource)]
+#[derive(Debug, Clone, Resource)]
 struct AsteroidSizes {
     big: Range<f32>,
     medium: Range<f32>,
     small: Range<f32>,
 }
-
 
 #[derive(Debug, Component, Default)]
 struct ThrustEngine {

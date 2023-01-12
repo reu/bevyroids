@@ -8,7 +8,7 @@ impl Plugin for RandomPlugin {
     }
 }
 
-#[derive(Debug, Deref, DerefMut,Resource)]
+#[derive(Debug, Deref, DerefMut, Resource)]
 
 pub struct Random(SmallRng);
 
