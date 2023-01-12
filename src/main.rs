@@ -434,12 +434,12 @@ fn ufo_state_system(
 }
 
 fn ufo_spawn_system(
-    mut windows: ResMut<Windows>,
+    windows: Res<Windows>,
     mut rng: Local<Random>,
     mut commands: Commands,
     ships: Query<Entity, With<Ship>>,
 ) {
-    let window = windows.get_primary_mut().unwrap();
+    let window = windows.get_primary().unwrap();
     if rng.gen_bool(1.0 / 10.0) {
         let h = (window.height() * 0.8) / 2.0;
         let w = window.width() / 2.0;
@@ -541,13 +541,13 @@ fn asteroid_spawn_system(
 }
 
 fn asteroid_generation_system(
-    mut windows: ResMut<Windows>,
+    windows: Res<Windows>,
     asteroid_sizes: Res<AsteroidSizes>,
     mut rng: Local<Random>,
     mut asteroids: EventReader<AsteroidSpawnEvent>,
     mut commands: Commands,
 ) {
-    let window = windows.get_primary_mut().unwrap();
+    let window = windows.get_primary().unwrap();
     let w = window.width() / 2.0;
     let h = window.height() / 2.0;
 
