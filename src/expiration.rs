@@ -6,7 +6,7 @@ pub struct ExpirationPlugin;
 
 impl Plugin for ExpirationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_to_stage(CoreStage::PreUpdate, expiration_system);
+        app.add_system(expiration_system.in_base_set(CoreSet::PostUpdate));
     }
 }
 

@@ -1,4 +1,6 @@
-use bevy::{prelude::*, time::FixedTimestep};
+use std::time::Duration;
+
+use bevy::{prelude::*, time::common_conditions::on_timer};
 use derive_more::From;
 
 pub struct PhysicsPlugin {
@@ -17,7 +19,7 @@ impl Default for PhysicsPlugin {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemLabel)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub struct PhysicsSystemLabel;
 
 #[derive(Resource)]
@@ -25,15 +27,15 @@ pub struct TimeStep(pub f32);
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(TimeStep(self.time_step))
-            .add_system_set(
-                SystemSet::new()
-                    .with_run_criteria(FixedTimestep::step(self.time_step.into()))
-                    .label(PhysicsSystemLabel)
-                    .with_system(damping_system.before(movement_system))
-                    .with_system(speed_limit_system.before(movement_system))
-                    .with_system(movement_system),
-            );
+        app.insert_resource(TimeStep(self.time_step)).add_systems(
+            (
+                damping_system.before(movement_system),
+                speed_limit_system.before(movement_system),
+                movement_system,
+            )
+                .distributive_run_if(on_timer(Duration::from_secs_f32(self.time_step)))
+                .in_set(PhysicsSystemLabel),
+        );
     }
 }
 

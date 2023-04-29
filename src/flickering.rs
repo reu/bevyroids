@@ -6,7 +6,7 @@ pub struct FlickPlugin;
 
 impl Plugin for FlickPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_to_stage(CoreStage::PostUpdate, flick_removed_system)
+        app.add_system(flick_removed_system.in_base_set(CoreSet::PostUpdate))
             .add_system(flick_system);
     }
 }
@@ -25,15 +25,19 @@ fn flick_system(time: Res<Time>, mut query: Query<(&mut Flick, &mut Visibility)>
         flick.0.tick(time.delta());
 
         if flick.0.finished() {
-            visibility.is_visible = !visibility.is_visible;
+            *visibility = if *visibility == Visibility::Hidden {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            }
         }
     }
 }
 
-fn flick_removed_system(removed: RemovedComponents<Flick>, mut query: Query<&mut Visibility>) {
+fn flick_removed_system(mut removed: RemovedComponents<Flick>, mut query: Query<&mut Visibility>) {
     for entity in removed.iter() {
         if let Ok(mut visibility) = query.get_mut(entity) {
-            visibility.is_visible = true;
+            *visibility = Visibility::Inherited
         }
     }
 }

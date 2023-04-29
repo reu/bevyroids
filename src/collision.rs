@@ -19,11 +19,11 @@ impl<Hittable: Component, Hurtable: Component> CollisionPlugin<Hittable, Hurtabl
 impl<Hittable: Component, Hurtable: Component> Plugin for CollisionPlugin<Hittable, Hurtable> {
     fn build(&self, app: &mut App) {
         app.add_event::<HitEvent<Hittable, Hurtable>>()
-            .add_system(collision_system::<Hittable, Hurtable>.label(CollisionSystemLabel));
+            .add_system(collision_system::<Hittable, Hurtable>.in_set(CollisionSystemLabel));
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemLabel)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub struct CollisionSystemLabel;
 
 #[derive(Debug)]

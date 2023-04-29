@@ -1,14 +1,11 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, window::PrimaryWindow};
 
 pub struct BoundaryPlugin;
 
 impl Plugin for BoundaryPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set_to_stage(
-            CoreStage::PostUpdate,
-            SystemSet::new()
-                .with_system(boundary_remove_system)
-                .with_system(boundary_wrap_system),
+        app.add_systems(
+            (boundary_remove_system, boundary_wrap_system).in_base_set(CoreSet::PostUpdate),
         );
     }
 }
@@ -29,10 +26,10 @@ pub struct BoundaryWrap;
 pub struct BoundaryRemoval;
 
 fn boundary_wrap_system(
-    windows: ResMut<Windows>,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
     mut query: Query<(&mut Transform, &Bounding), With<BoundaryWrap>>,
 ) {
-    if let Some(window) = windows.get_primary() {
+    if let Ok(window) = primary_window.get_single() {
         for (mut transform, radius) in query.iter_mut() {
             let x = transform.translation.x;
             let y = transform.translation.y;
@@ -56,10 +53,10 @@ fn boundary_wrap_system(
 
 fn boundary_remove_system(
     mut commands: Commands,
-    windows: ResMut<Windows>,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
     query: Query<(Entity, &Transform, &Bounding), With<BoundaryRemoval>>,
 ) {
-    if let Some(window) = windows.get_primary() {
+    if let Ok(window) = primary_window.get_single() {
         for (entity, transform, radius) in query.iter() {
             let half_width = window.width() / 2.0;
             let half_height = window.height() / 2.0;

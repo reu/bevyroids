@@ -2,7 +2,7 @@
 
 use std::{f32::consts::PI, ops::Range, time::Duration};
 
-use bevy::{prelude::*, time::FixedTimestep, utils::HashSet};
+use bevy::{prelude::*, time::common_conditions::on_timer, utils::HashSet, window::PrimaryWindow};
 use bevy_prototype_lyon::{
     entity::ShapeBundle,
     prelude::{
@@ -29,16 +29,15 @@ mod random;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
-            window: WindowDescriptor {
+            primary_window: Some(Window {
                 title: "Bevyroids".to_string(),
-                width: 800.0,
-                height: 600.0,
+                resolution: (800.0, 600.0).into(),
                 ..Default::default()
-            },
+            }),
             ..Default::default()
         }))
         .insert_resource(ClearColor(Color::BLACK))
-        .insert_resource(Msaa { samples: 4 })
+        .insert_resource(Msaa::Sample4)
         .add_plugin(ShapePlugin)
         .insert_resource(AsteroidSizes {
             big: 50.0..60.0,
@@ -58,19 +57,20 @@ fn main() {
         .add_plugin(ExpirationPlugin)
         .add_plugin(FlickPlugin)
         .add_startup_system(setup_system)
-        .add_system_set(
-            SystemSet::new()
-                .label("input")
-                .before(PhysicsSystemLabel)
-                .with_system(steering_control_system)
-                .with_system(thrust_control_system)
-                .with_system(weapon_control_system),
+        .add_systems(
+            (
+                steering_control_system,
+                thrust_control_system,
+                weapon_control_system,
+            )
+                .in_set(InputLabel)
+                .before(PhysicsSystemLabel),
         )
-        .add_system(weapon_system.after("input"))
-        .add_system(thrust_system.after("input"))
-        .add_system(asteroid_spawn_system.with_run_criteria(FixedTimestep::step(0.5)))
+        .add_system(weapon_system.after(InputLabel))
+        .add_system(thrust_system.after(InputLabel))
+        .add_system(asteroid_spawn_system.run_if(on_timer(Duration::from_secs_f32(0.5))))
         .add_system(asteroid_generation_system)
-        .add_system(ufo_spawn_system.with_run_criteria(FixedTimestep::step(1.0)))
+        .add_system(ufo_spawn_system.run_if(on_timer(Duration::from_secs_f32(1.0))))
         .add_system(explosion_system)
         .add_system(ship_state_system.before(CollisionSystemLabel))
         .add_system(ufo_state_system.before(CollisionSystemLabel))
@@ -79,6 +79,9 @@ fn main() {
         .add_system(ufo_hit_system.after(CollisionSystemLabel))
         .run();
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
+pub struct InputLabel;
 
 #[derive(Debug, Clone, Resource)]
 struct AsteroidSizes {
@@ -161,17 +164,12 @@ impl Ship {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 enum ShipState {
+    #[default]
     Alive,
     Dead(Timer),
     Spawning(Timer),
-}
-
-impl Default for ShipState {
-    fn default() -> Self {
-        ShipState::Alive
-    }
 }
 
 #[derive(Debug, Component, Default)]
@@ -220,7 +218,8 @@ struct AsteroidSpawnEvent(Vec2, Bounding);
 #[derive(Bundle)]
 struct ExplosionBundle {
     #[bundle]
-    shape_bundle: ShapeBundle,
+    shape: ShapeBundle,
+    fill: Fill,
     explosion: Explosion,
     velocity: Velocity,
     damping: Damping,
@@ -230,14 +229,14 @@ struct ExplosionBundle {
 impl Default for ExplosionBundle {
     fn default() -> Self {
         Self {
-            shape_bundle: GeometryBuilder::build_as(
-                &shapes::Circle {
+            shape: ShapeBundle {
+                path: GeometryBuilder::build_as(&shapes::Circle {
                     radius: 1.0,
                     center: Vec2::ZERO,
-                },
-                DrawMode::Fill(FillMode::color(Color::WHITE)),
-                Transform::default(),
-            ),
+                }),
+                ..Default::default()
+            },
+            fill: Fill::color(Color::WHITE),
             explosion: Explosion::default(),
             velocity: Velocity::default(),
             damping: Damping::from(0.97),
@@ -283,18 +282,19 @@ fn weapon_system(
             let bullet_pos = transform.translation + (bullet_dir * bounds);
 
             commands
-                .spawn(GeometryBuilder::build_as(
-                    &shapes::Circle {
+                .spawn(ShapeBundle {
+                    path: GeometryBuilder::build_as(&shapes::Circle {
                         radius: 2.0,
                         center: Vec2::ZERO,
-                    },
-                    DrawMode::Fill(FillMode::color(Color::WHITE)),
-                    Transform::default().with_translation(Vec3::new(
-                        bullet_pos.x,
-                        bullet_pos.y,
-                        0.0,
-                    )),
-                ))
+                    }),
+                    ..Default::default()
+                })
+                .insert(Fill::color(Color::WHITE))
+                .insert(Transform::from_translation(Vec3::new(
+                    bullet_pos.x,
+                    bullet_pos.y,
+                    0.0,
+                )))
                 .insert(Bullet)
                 .insert(Collidable)
                 .insert(Bounding::from_radius(2.0))
@@ -335,8 +335,8 @@ fn ship_state_system(
                 if timer.elapsed().is_zero() {
                     commands
                         .entity(entity)
-                        .insert(GeometryBuilder::build_as(
-                            &{
+                        .insert(ShapeBundle {
+                            path: GeometryBuilder::build_as(&{
                                 let mut path_builder = PathBuilder::new();
                                 path_builder.move_to(Vec2::ZERO);
                                 path_builder.line_to(Vec2::new(-8.0, -8.0));
@@ -346,10 +346,11 @@ fn ship_state_system(
                                 let mut line = path_builder.build();
                                 line.0 = line.0.transformed(&Rotation::new(Angle::degrees(-90.0)));
                                 line
-                            },
-                            DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.0)),
-                            Transform::default(),
-                        ))
+                            }),
+                            ..Default::default()
+                        })
+                        .insert(Stroke::new(Color::WHITE, 1.0))
+                        .insert(Transform::default())
                         .insert(Bounding::from_radius(12.0))
                         .insert(Velocity::default())
                         .insert(SpeedLimit::from(350.0))
@@ -432,13 +433,13 @@ fn ufo_state_system(
 }
 
 fn ufo_spawn_system(
-    windows: Res<Windows>,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
     mut rng: Local<Random>,
     mut commands: Commands,
     ships: Query<Entity, With<Ship>>,
 ) {
     if rng.gen_bool(1.0 / 10.0) {
-        let window = windows.primary();
+        let window = primary_window.single();
         let h = (window.height() * 0.8) / 2.0;
         let w = window.width() / 2.0;
 
@@ -450,16 +451,8 @@ fn ufo_spawn_system(
 
         let mut ufo = commands.spawn_empty();
 
-        ufo.insert(GeometryBuilder::build_as(
-            &shapes::Rectangle {
-                extents: Vec2::new(c, c / 2.0),
-                ..Default::default()
-            },
-            DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.0)),
-            Transform::default().with_translation(position),
-        ))
-        .insert(GeometryBuilder::build_as(
-            &{
+        ufo.insert(ShapeBundle {
+            path: GeometryBuilder::build_as(&{
                 let h = c / 2.5;
                 let w = c;
                 let hw = w / 2.0;
@@ -484,10 +477,11 @@ fn ufo_spawn_system(
                 path_builder.line_to(Vec2::new(hw * 0.5, hh));
 
                 path_builder.build()
-            },
-            DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.0)),
-            Transform::default().with_translation(position),
-        ))
+            }),
+            ..Default::default()
+        })
+        .insert(Stroke::new(Color::WHITE, 1.0))
+        .insert(Transform::from_translation(position))
         .insert(Ufo::alive(Duration::from_secs(rng.gen_range(1..5))))
         .insert(Weapon {
             force: rng.gen_range(300.0..500.0),
@@ -509,13 +503,13 @@ fn ufo_spawn_system(
 }
 
 fn asteroid_spawn_system(
-    windows: ResMut<Windows>,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
     asteroid_sizes: Res<AsteroidSizes>,
     mut rng: Local<Random>,
     mut asteroids: EventWriter<AsteroidSpawnEvent>,
 ) {
     if rng.gen_bool(1.0 / 3.0) {
-        let window = windows.primary();
+        let window = primary_window.single();
         let w = window.width() / 2.0;
         let h = window.height() / 2.0;
 
@@ -539,13 +533,13 @@ fn asteroid_spawn_system(
 }
 
 fn asteroid_generation_system(
-    windows: Res<Windows>,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
     asteroid_sizes: Res<AsteroidSizes>,
     mut rng: Local<Random>,
     mut asteroids: EventReader<AsteroidSpawnEvent>,
     mut commands: Commands,
 ) {
-    let window = windows.primary();
+    let window = primary_window.single();
     let w = window.width() / 2.0;
     let h = window.height() / 2.0;
 
@@ -581,11 +575,14 @@ fn asteroid_generation_system(
         };
 
         commands
-            .spawn(GeometryBuilder::build_as(
-                &shape,
-                DrawMode::Stroke(StrokeMode::new(Color::WHITE, 1.0)),
-                Transform::default().with_translation(Vec3::new(position.x, position.y, 0.0)),
-            ))
+            .spawn(ShapeBundle {
+                path: GeometryBuilder::build_as(&shape),
+                ..Default::default()
+            })
+            .insert(Stroke::new(Color::WHITE, 1.0))
+            .insert(Transform::from_translation(Vec3::new(
+                position.x, position.y, 0.0,
+            )))
             .insert(Asteroid)
             .insert(Collidable)
             .insert(*bounds)
@@ -662,7 +659,7 @@ fn ship_hit_system(
 
                 commands
                     .spawn(ExplosionBundle::default())
-                    .insert(Transform::default().with_translation(position))
+                    .insert(Transform::from_translation(position))
                     .insert(Velocity::from(
                         Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(150.0..250.0),
                     ))
@@ -718,7 +715,7 @@ fn asteroid_hit_system(
 
                 commands
                     .spawn(ExplosionBundle::default())
-                    .insert(Transform::default().with_translation(position))
+                    .insert(Transform::from_translation(position))
                     .insert(Velocity::from(
                         Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(50.0..100.0),
                     ))
@@ -764,7 +761,7 @@ fn ufo_hit_system(
 
                 commands
                     .spawn(ExplosionBundle::default())
-                    .insert(Transform::default().with_translation(position))
+                    .insert(Transform::from_translation(position))
                     .insert(Velocity::from(
                         Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(50.0..100.0),
                     ))
