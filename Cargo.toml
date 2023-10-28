@@ -1,6 +1,6 @@
 [package]
 name = "bevyroids"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [profile.dev]
@@ -13,7 +13,7 @@ opt-level = 3
 lto = "thin"
 
 [dependencies]
-bevy = "0.10.1"
-bevy_prototype_lyon = "0.8.0"
+bevy = "0.11.3"
+bevy_prototype_lyon = "0.9.0"
 derive_more = "0.99.17"
 rand = { version = "0.8.5", features = ["small_rng"] }

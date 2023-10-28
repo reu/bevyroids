@@ -3,6 +3,8 @@
 use std::{f32::consts::PI, ops::Range, time::Duration};
 
 use bevy::{prelude::*, time::common_conditions::on_timer, utils::HashSet, window::PrimaryWindow};
+use bevy::ecs::{event::{Event}};
+use bevy::ecs::schedule::ScheduleLabel;
 use bevy_prototype_lyon::{
     entity::ShapeBundle,
     prelude::{
@@ -38,26 +40,27 @@ fn main() {
         }))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(Msaa::Sample4)
-        .add_plugin(ShapePlugin)
+        .add_plugins(ShapePlugin)
         .insert_resource(AsteroidSizes {
             big: 50.0..60.0,
             medium: 30.0..40.0,
             small: 10.0..20.0,
         })
         .add_event::<AsteroidSpawnEvent>()
-        .add_plugin(RandomPlugin)
-        .add_plugin(PhysicsPlugin::with_fixed_time_step(1.0 / 120.0))
-        .add_plugin(CollisionPlugin::<Bullet, Asteroid>::new())
-        .add_plugin(CollisionPlugin::<Bullet, Ufo>::new())
-        .add_plugin(CollisionPlugin::<Bullet, Ship>::new())
-        .add_plugin(CollisionPlugin::<Asteroid, Ship>::new())
-        .add_plugin(CollisionPlugin::<Asteroid, Ufo>::new())
-        .add_plugin(CollisionPlugin::<Ufo, Ship>::new())
-        .add_plugin(BoundaryPlugin)
-        .add_plugin(ExpirationPlugin)
-        .add_plugin(FlickPlugin)
-        .add_startup_system(setup_system)
+        .add_plugins(RandomPlugin)
+        .add_plugins(PhysicsPlugin::with_fixed_time_step(1.0 / 120.0))
+        .add_plugins(CollisionPlugin::<Bullet, Asteroid>::new())
+        .add_plugins(CollisionPlugin::<Bullet, Ufo>::new())
+        .add_plugins(CollisionPlugin::<Bullet, Ship>::new())
+        .add_plugins(CollisionPlugin::<Asteroid, Ship>::new())
+        .add_plugins(CollisionPlugin::<Asteroid, Ufo>::new())
+        .add_plugins(CollisionPlugin::<Ufo, Ship>::new())
+        .add_plugins(BoundaryPlugin)
+        .add_plugins(ExpirationPlugin)
+        .add_plugins(FlickPlugin)
+        .add_systems(Startup, setup_system)
         .add_systems(
+            Update,
             (
                 steering_control_system,
                 thrust_control_system,
@@ -66,21 +69,21 @@ fn main() {
                 .in_set(InputLabel)
                 .before(PhysicsSystemLabel),
         )
-        .add_system(weapon_system.after(InputLabel))
-        .add_system(thrust_system.after(InputLabel))
-        .add_system(asteroid_spawn_system.run_if(on_timer(Duration::from_secs_f32(0.5))))
-        .add_system(asteroid_generation_system)
-        .add_system(ufo_spawn_system.run_if(on_timer(Duration::from_secs_f32(1.0))))
-        .add_system(explosion_system)
-        .add_system(ship_state_system.before(CollisionSystemLabel))
-        .add_system(ufo_state_system.before(CollisionSystemLabel))
-        .add_system(asteroid_hit_system.after(CollisionSystemLabel))
-        .add_system(ship_hit_system.after(CollisionSystemLabel))
-        .add_system(ufo_hit_system.after(CollisionSystemLabel))
+        .add_systems(Update, weapon_system.after(InputLabel))
+        .add_systems(Update, thrust_system.after(InputLabel))
+        .add_systems(Update, asteroid_spawn_system.run_if(on_timer(Duration::from_secs_f32(0.5))))
+        .add_systems(Update, asteroid_generation_system)
+        .add_systems(Update, ufo_spawn_system.run_if(on_timer(Duration::from_secs_f32(1.0))))
+        .add_systems(Update, explosion_system)
+        .add_systems(Update, ship_state_system.before(CollisionSystemLabel))
+        .add_systems(Update, ufo_state_system.before(CollisionSystemLabel))
+        .add_systems(Update, asteroid_hit_system.after(CollisionSystemLabel))
+        .add_systems(Update, ship_hit_system.after(CollisionSystemLabel))
+        .add_systems(Update, ufo_hit_system.after(CollisionSystemLabel))
         .run();
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet, ScheduleLabel)]
 pub struct InputLabel;
 
 #[derive(Debug, Clone, Resource)]
@@ -212,12 +215,12 @@ struct Explosion;
 #[derive(Debug, Component, Default)]
 struct Asteroid;
 
-#[derive(Debug)]
+#[derive(Debug, Event)]
 struct AsteroidSpawnEvent(Vec2, Bounding);
 
 #[derive(Bundle)]
 struct ExplosionBundle {
-    #[bundle]
+    //#[bundle]
     shape: ShapeBundle,
     fill: Fill,
     explosion: Explosion,
