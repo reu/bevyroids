@@ -4,10 +4,7 @@ pub struct BoundaryPlugin;
 
 impl Plugin for BoundaryPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            PostUpdate,
-            (boundary_remove_system, boundary_wrap_system)
-        );
+        app.add_systems(PostUpdate, (boundary_remove_system, boundary_wrap_system));
     }
 }
 

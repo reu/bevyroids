@@ -2,9 +2,13 @@
 
 use std::{f32::consts::PI, ops::Range, time::Duration};
 
-use bevy::{prelude::*, time::common_conditions::on_timer, utils::HashSet, window::PrimaryWindow};
-use bevy::ecs::{event::{Event}};
-use bevy::ecs::schedule::ScheduleLabel;
+use bevy::{
+    ecs::{event::Event, schedule::ScheduleLabel},
+    prelude::*,
+    time::common_conditions::on_timer,
+    utils::HashSet,
+    window::PrimaryWindow,
+};
 use bevy_prototype_lyon::{
     entity::ShapeBundle,
     prelude::{
@@ -71,9 +75,15 @@ fn main() {
         )
         .add_systems(Update, weapon_system.after(InputLabel))
         .add_systems(Update, thrust_system.after(InputLabel))
-        .add_systems(Update, asteroid_spawn_system.run_if(on_timer(Duration::from_secs_f32(0.5))))
+        .add_systems(
+            Update,
+            asteroid_spawn_system.run_if(on_timer(Duration::from_secs_f32(0.5))),
+        )
         .add_systems(Update, asteroid_generation_system)
-        .add_systems(Update, ufo_spawn_system.run_if(on_timer(Duration::from_secs_f32(1.0))))
+        .add_systems(
+            Update,
+            ufo_spawn_system.run_if(on_timer(Duration::from_secs_f32(1.0))),
+        )
         .add_systems(Update, explosion_system)
         .add_systems(Update, ship_state_system.before(CollisionSystemLabel))
         .add_systems(Update, ufo_state_system.before(CollisionSystemLabel))
@@ -220,7 +230,6 @@ struct AsteroidSpawnEvent(Vec2, Bounding);
 
 #[derive(Bundle)]
 struct ExplosionBundle {
-    //#[bundle]
     shape: ShapeBundle,
     fill: Fill,
     explosion: Explosion,
@@ -240,7 +249,7 @@ impl Default for ExplosionBundle {
                 ..Default::default()
             },
             fill: Fill::color(Color::WHITE),
-            explosion: Explosion::default(),
+            explosion: Explosion,
             velocity: Velocity::default(),
             damping: Damping::from(0.97),
             expiration: Expiration::new(Duration::from_secs(1)),

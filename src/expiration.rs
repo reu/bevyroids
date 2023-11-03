@@ -6,7 +6,8 @@ pub struct ExpirationPlugin;
 
 impl Plugin for ExpirationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostUpdate, expiration_system);    }
+        app.add_systems(PostUpdate, expiration_system);
+    }
 }
 
 #[derive(Debug, Component, Deref, DerefMut)]

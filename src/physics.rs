@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use bevy::{prelude::*, time::common_conditions::on_fixed_timer, ecs::schedule::ScheduleLabel};
+use bevy::{ecs::schedule::ScheduleLabel, prelude::*, time::common_conditions::on_fixed_timer};
 use derive_more::From;
 
 pub struct PhysicsPlugin {
@@ -35,7 +35,7 @@ impl Plugin for PhysicsPlugin {
                 movement_system,
             )
                 .distributive_run_if(on_fixed_timer(Duration::from_secs_f32(self.time_step)))
-                .in_set(PhysicsSystemLabel)
+                .in_set(PhysicsSystemLabel),
         );
     }
 }

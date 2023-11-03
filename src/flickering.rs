@@ -6,10 +6,7 @@ pub struct FlickPlugin;
 
 impl Plugin for FlickPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            PostUpdate,
-            (flick_removed_system, flick_system)
-        );
+        app.add_systems(PostUpdate, (flick_removed_system, flick_system));
     }
 }
 
