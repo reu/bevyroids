@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use bevy::prelude::*;
+use bevy::{prelude::*, ecs::schedule::ScheduleLabel};
 
 use crate::boundary::Bounding;
 
@@ -19,14 +19,14 @@ impl<Hittable: Component, Hurtable: Component> CollisionPlugin<Hittable, Hurtabl
 impl<Hittable: Component, Hurtable: Component> Plugin for CollisionPlugin<Hittable, Hurtable> {
     fn build(&self, app: &mut App) {
         app.add_event::<HitEvent<Hittable, Hurtable>>()
-            .add_system(collision_system::<Hittable, Hurtable>.in_set(CollisionSystemLabel));
+            .add_systems(Update, collision_system::<Hittable, Hurtable>.in_set(CollisionSystemLabel));
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet, ScheduleLabel)]
 pub struct CollisionSystemLabel;
 
-#[derive(Debug)]
+#[derive(Debug, Event)]
 pub struct HitEvent<A, B> {
     entities: (Entity, Entity),
     _phantom: PhantomData<(A, B)>,
