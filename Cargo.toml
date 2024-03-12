@@ -13,7 +13,7 @@ opt-level = 3
 lto = "thin"
 
 [dependencies]
-bevy = "0.11.3"
-bevy_prototype_lyon = "0.9.0"
+bevy = "0.13"
+bevy_prototype_lyon = "0.11"
 derive_more = "0.99.17"
 rand = { version = "0.8.5", features = ["small_rng"] }

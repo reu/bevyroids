@@ -34,7 +34,7 @@ fn flick_system(time: Res<Time>, mut query: Query<(&mut Flick, &mut Visibility)>
 }
 
 fn flick_removed_system(mut removed: RemovedComponents<Flick>, mut query: Query<&mut Visibility>) {
-    for entity in removed.iter() {
+    for entity in removed.read() {
         if let Ok(mut visibility) = query.get_mut(entity) {
             *visibility = Visibility::Inherited
         }

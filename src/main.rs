@@ -555,7 +555,7 @@ fn asteroid_generation_system(
     let w = window.width() / 2.0;
     let h = window.height() / 2.0;
 
-    for AsteroidSpawnEvent(position, bounds) in asteroids.iter() {
+    for AsteroidSpawnEvent(position, bounds) in asteroids.read() {
         let velocity = Vec2::new(rng.gen_range(-w..w), rng.gen_range(-h..h));
         let scale = if asteroid_sizes.big.contains(bounds) {
             rng.gen_range(30.0..60.0)
@@ -605,13 +605,13 @@ fn asteroid_generation_system(
 }
 
 fn steering_control_system(
-    keyboard_input: Res<Input<KeyCode>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
     mut query: Query<(&mut AngularVelocity, &SteeringControl)>,
 ) {
     for (mut angular_velocity, steering) in query.iter_mut() {
-        if keyboard_input.pressed(KeyCode::Left) {
+        if keyboard_input.pressed(KeyCode::ArrowLeft) {
             *angular_velocity = AngularVelocity::from(steering.0.get());
-        } else if keyboard_input.pressed(KeyCode::Right) {
+        } else if keyboard_input.pressed(KeyCode::ArrowRight) {
             *angular_velocity = AngularVelocity::from(-steering.0.get());
         } else {
             *angular_velocity = AngularVelocity::from(0.0);
@@ -619,13 +619,13 @@ fn steering_control_system(
     }
 }
 
-fn thrust_control_system(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut ThrustEngine>) {
+fn thrust_control_system(keyboard_input: Res<ButtonInput<KeyCode>>, mut query: Query<&mut ThrustEngine>) {
     for mut thrust_engine in query.iter_mut() {
-        thrust_engine.on = keyboard_input.pressed(KeyCode::Up)
+        thrust_engine.on = keyboard_input.pressed(KeyCode::ArrowUp)
     }
 }
 
-fn weapon_control_system(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Weapon>) {
+fn weapon_control_system(keyboard_input: Res<ButtonInput<KeyCode>>, mut query: Query<&mut Weapon>) {
     for mut weapon in query.iter_mut() {
         let pressed = if weapon.automatic {
             keyboard_input.pressed(KeyCode::Space)
@@ -653,10 +653,10 @@ fn ship_hit_system(
     query: Query<&Transform, With<Ship>>,
 ) {
     let hits = asteroid_hits
-        .iter()
+        .read()
         .map(|hit| hit.hurtable())
-        .chain(bullet_hits.iter().map(|hit| hit.hurtable()))
-        .chain(ufo_hits.iter().map(|hit| hit.hurtable()));
+        .chain(bullet_hits.read().map(|hit| hit.hurtable()))
+        .chain(ufo_hits.read().map(|hit| hit.hurtable()));
 
     for ship in hits {
         if let Ok(transform) = query.get(ship) {
@@ -694,7 +694,7 @@ fn asteroid_hit_system(
 ) {
     let mut removed = HashSet::with_capacity(asteroid_hits.len());
 
-    for hit in asteroid_hits.iter() {
+    for hit in asteroid_hits.read() {
         let asteroid = hit.hurtable();
         let bullet = hit.hittable();
 
@@ -756,9 +756,9 @@ fn ufo_hit_system(
     let mut removed = HashSet::with_capacity(bullet_hits.len() + asteroid_hits.len());
 
     let hits = bullet_hits
-        .iter()
+        .read()
         .map(|hit| hit.hurtable())
-        .chain(asteroid_hits.iter().map(|hit| hit.hurtable()));
+        .chain(asteroid_hits.read().map(|hit| hit.hurtable()));
 
     for ufo in hits {
         if removed.contains(&ufo) {
@@ -788,7 +788,7 @@ fn ufo_hit_system(
         removed.insert(ufo);
     }
 
-    for hit in bullet_hits.iter() {
+    for hit in bullet_hits.read() {
         let bullet = hit.hittable();
         if removed.contains(&bullet) {
             continue;
